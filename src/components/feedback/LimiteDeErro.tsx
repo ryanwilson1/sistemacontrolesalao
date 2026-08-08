@@ -1,0 +1,47 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { AlertCircle } from 'lucide-react'
+
+/**
+ * Rede de proteção da árvore de componentes.
+ *
+ * Uma falha de renderização não pode derrubar o sistema inteiro nem
+ * exibir a pilha de erro — isso entregaria a estrutura interna do código.
+ */
+export class LimiteDeErro extends Component<{ children: ReactNode }, { falhou: boolean }> {
+  override state = { falhou: false }
+
+  static getDerivedStateFromError() {
+    return { falhou: true }
+  }
+
+  override componentDidCatch(erro: Error, info: ErrorInfo) {
+    if (import.meta.env.DEV) console.error('[falha na renderização]', erro, info)
+    // Em produção, envie para o monitoramento aqui.
+  }
+
+  override render() {
+    if (!this.state.falhou) return this.props.children
+
+    return (
+      <div className="grid min-h-dvh place-items-center bg-quartzo-50 px-6">
+        <div className="max-w-sm text-center">
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-[#F7E9EA] text-perigo">
+            <AlertCircle className="h-6 w-6" strokeWidth={1.6} />
+          </span>
+          <h1 className="mt-5 font-display text-xl font-light tracking-tight text-onix-900">
+            A tela travou
+          </h1>
+          <p className="mt-2 text-[14px] leading-relaxed text-onix-400">
+            Recarregue a página para continuar.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-6 h-11 rounded-xl bg-onix-800 px-5 text-sm font-medium text-white transition-colors hover:bg-onix-900"
+          >
+            Recarregar
+          </button>
+        </div>
+      </div>
+    )
+  }
+}
