@@ -1,0 +1,5 @@
+export * from './canal'
+export * from './lembretes'
+export * from './modelos'
+export * from './notificacoes'
+export { lembretesRepo, notificacoesRepo } from '../repositorios/comunicacao'
