@@ -1,0 +1,5 @@
+# Rotas do aplicativo.
+# Este arquivo é lido pelo Netlify mesmo em publicação manual (arrastar a
+# pasta), quando o netlify.toml não é consultado. Sem ele, abrir /agenda
+# direto ou recarregar /agendar/emely-barbosa devolve 404.
+/*    /index.html   200

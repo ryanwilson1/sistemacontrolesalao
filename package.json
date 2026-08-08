@@ -1,0 +1,40 @@
+{
+  "name": "system-studio",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Sistema de gestão para studio de beleza",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "verificar": "tsc --noEmit",
+    "testar": "tsx testes/motor-de-horarios.ts && tsx testes/qrcode.ts && tsx testes/contraste.ts && tsx testes/imagens.ts && tsx testes/persistencia.ts && tsx testes/fidelidade.ts && tsx testes/restauracao.ts && tsx testes/fluxos-reais.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.2",
+    "date-fns": "^3.6.0",
+    "framer-motion": "^11.3.19",
+    "lucide-react": "^0.427.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.14",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "jsdom": "^30.0.1",
+    "postcss": "^8.4.41",
+    "tailwindcss": "^3.4.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
