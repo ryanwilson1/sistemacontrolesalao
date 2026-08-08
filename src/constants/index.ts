@@ -1,0 +1,5 @@
+export * from './app'
+export * from './dominio'
+export * from './portal'
+export * from './rotas'
+export * from './tema'
