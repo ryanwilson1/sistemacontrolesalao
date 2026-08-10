@@ -52,8 +52,27 @@ export class ErroDeConfiguracao extends Error {
   }
 }
 
+/**
+ * O servidor pediu para esperar.
+ *
+ * O Supabase limita quantos e-mails de recuperação saem por minuto —
+ * é proteção contra alguém usar o sistema para inundar a caixa de
+ * entrada de terceiros. Ao estourar, ele responde 429.
+ *
+ * Separado dos demais porque não é erro de uso nem falha: é o tempo
+ * fazendo seu trabalho. Tentar de novo na hora não adianta, e é
+ * exatamente o que a pessoa faz quando lê "não foi possível enviar".
+ */
+export class ErroDeEspera extends Error {
+  constructor(mensagem?: string) {
+    super(mensagem ?? 'Aguarde alguns instantes antes de pedir um novo link.')
+    this.name = 'ErroDeEspera'
+  }
+}
+
 /** Traduz qualquer falha para uma frase que a usuária entende. */
 export function mensagemDeErro(erro: unknown): string {
+  if (erro instanceof ErroDeEspera) return erro.message
   if (erro instanceof ErroDeConfiguracao) return erro.message
   if (erro instanceof ErroDeConflito) return erro.message
   if (erro instanceof ErroDeRegra) return erro.message

@@ -14,10 +14,20 @@ export function useAtendentes() {
   )
 }
 
+/**
+ * Cadastra ou atualiza uma profissional.
+ *
+ * `id` opcional: sem ele, cria. O hook só sabia atualizar — e era esse
+ * o buraco por trás do texto "cadastro entra na próxima etapa" que
+ * ficou na tela de Equipe. Não havia caminho para criar ninguém, nem
+ * pela interface nem por baixo dela.
+ */
 export function useSalvarProfissional() {
   return useAcao(
-    async ({ id, dados }: { id: string; dados: Partial<Profissional> }) =>
-      profissionaisRepo.atualizar(id, dados),
+    async ({ id, dados }: { id?: string; dados: Partial<Profissional> }) =>
+      id
+        ? profissionaisRepo.atualizar(id, dados)
+        : profissionaisRepo.criar(dados as Omit<Profissional, 'id' | 'criadoEm' | 'atualizadoEm'>),
     [CHAVES.equipe, CHAVES.agenda],
   )
 }
