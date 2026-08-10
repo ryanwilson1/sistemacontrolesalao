@@ -124,10 +124,29 @@ const chaveDe = (colecao: Colecao): string => CHAVE_PRIMARIA[colecao] ?? 'id'
  * `supabase/09-concorrencia.sql` — as duas precisam concordar, e é por
  * isso que a lista está escrita e não deduzida.
  */
-const VERSIONADAS = new Set<Colecao>([
-  'clientes', 'agendamentos', 'servicos', 'profissionais',
-  'produtos', 'studio', 'lancamentos', 'cupons',
-])
+/*
+  Desligado.
+
+  A função `atualizar_com_versao` existe no banco, com a assinatura
+  correta e permissão de execução para `authenticated` — as três coisas
+  foram conferidas. Ainda assim, toda chamada pela API voltava 400, e a
+  proprietária não conseguia salvar serviço, produto nem cliente.
+
+  Diante de um sistema que ela precisa usar hoje, a escolha é simples:
+  gravação direta na tabela, que é o caminho que sempre funcionou.
+
+  O que se perde é a proteção contra duas pessoas editando o MESMO
+  campo do MESMO registro ao mesmo tempo. O que continua de pé:
+
+    · só as colunas alteradas são enviadas, então edições em campos
+      diferentes convivem sem se sobrescrever;
+    · o RLS continua barrando quem não é da equipe;
+    · a trilha de auditoria continua registrando quem mudou o quê.
+
+  Para religar quando a causa do 400 for encontrada, basta devolver as
+  coleções a esta lista. O resto do código continua no lugar.
+*/
+const VERSIONADAS = new Set<Colecao>([])
 
 export class SupabaseAdapter implements AdaptadorDeArmazenamento {
   readonly nome = 'Supabase'
