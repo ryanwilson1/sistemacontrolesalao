@@ -1,17 +1,11 @@
 import { RepositorioBase } from './base'
+import { AFETA_GAVETA, FORMAS_PAGAMENTO as FORMAS } from '@/constants'
 import { agendamentosRepo } from './agenda'
 import { ErroDeRegra } from '@/utils/erros'
 import { faixaDoDia, isoData } from '@/utils/datas'
 import type {
   Caixa, FormaPagamento, MovimentoCaixa, OrigemMovimento, ResumoCaixa,
 } from '@/types'
-
-const FORMAS: FormaPagamento[] = [
-  'dinheiro', 'pix', 'debito', 'credito', 'transferencia', 'outro',
-]
-
-/** Só dinheiro vivo muda o que está na gaveta. */
-const AFETA_GAVETA: FormaPagamento[] = ['dinheiro']
 
 class RepositorioMovimentosCaixa extends RepositorioBase<MovimentoCaixa> {
   constructor() {

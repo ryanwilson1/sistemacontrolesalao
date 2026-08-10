@@ -95,6 +95,27 @@ const LOCAIS_PERSISTENTES: Colecao[] = ['backups', 'registrosBackup', 'configura
 const CHAVE_LOCAL = (colecao: Colecao) => `studio:local:${colecao}`
 
 /**
+ * Qual coluna é a chave de cada tabela.
+ *
+ * Quase todas usam `id`. `jornada` não: ela é uma linha por dia da
+ * semana, e a chave é o próprio `dia_semana` — não faria sentido um
+ * identificador aleatório para "terça-feira".
+ *
+ * Assumir `id` em todas custou um erro em produção. `gravar()` fazia
+ * `select('id')` antes de escrever, e na jornada isso virava:
+ *
+ *   GET /rest/v1/jornada?select=id → 400 Bad Request
+ *
+ * Os horários de funcionamento não salvavam, e a mensagem no console
+ * não dizia por quê.
+ */
+const CHAVE_PRIMARIA: Partial<Record<Colecao, string>> = {
+  jornada: 'dia_semana',
+}
+
+const chaveDe = (colecao: Colecao): string => CHAVE_PRIMARIA[colecao] ?? 'id'
+
+/**
  * Coleções com controle de versão no banco.
  *
  * São as que duas pessoas realmente abrem ao mesmo tempo: a ficha da
@@ -196,13 +217,14 @@ export class SupabaseAdapter implements AdaptadorDeArmazenamento {
 
     const tabela = TABELA[colecao]
     const banco = supabase()
+    const chave = chaveDe(colecao)
 
-    const { data: existentes, error: falhaLeitura } = await banco.from(tabela).select('id')
+    const { data: existentes, error: falhaLeitura } = await banco.from(tabela).select(chave)
     if (falhaLeitura) throw this.traduzirFalha(falhaLeitura, colecao)
 
     if (registros.length > 0) {
       const linhas = registros.map((r) => paraSublinhado(r as Record<string, unknown>))
-      const { error } = await banco.from(tabela).upsert(linhas, { onConflict: 'id' })
+      const { error } = await banco.from(tabela).upsert(linhas, { onConflict: chave })
       if (error) throw this.traduzirFalha(error, colecao)
     }
 
@@ -210,15 +232,18 @@ export class SupabaseAdapter implements AdaptadorDeArmazenamento {
     // deliberado: se a rede cair no meio, sobra registro a mais — que a
     // próxima gravação corrige — em vez de faltar registro, que é
     // perda de dado.
-    const agora = new Set((registros as { id?: string }[]).map((r) => r.id).filter(Boolean))
-    const removidos = ((existentes ?? []) as { id?: string }[])
-      .map((r) => r.id)
-      .filter((id): id is string => !!id && !agora.has(id))
+    const chaveCamelo = chave.replace(/_([a-z])/g, (_, l: string) => l.toUpperCase())
+    const agora = new Set(
+      (registros as Record<string, unknown>[]).map((r) => r[chaveCamelo]).filter((v) => v != null),
+    )
+    const removidos = ((existentes ?? []) as unknown as Record<string, unknown>[])
+      .map((r) => r[chave])
+      .filter((valor) => valor != null && !agora.has(valor))
 
     if (removidos.length > 0) {
       // Em lotes: uma lista de dez mil ids não cabe numa URL.
       for (let i = 0; i < removidos.length; i += 200) {
-        const { error } = await banco.from(tabela).delete().in('id', removidos.slice(i, i + 200))
+        const { error } = await banco.from(tabela).delete().in(chave, removidos.slice(i, i + 200))
         if (error) throw this.traduzirFalha(error, colecao)
       }
     }

@@ -2,6 +2,7 @@ import { armazenamento } from './storage'
 import { tempoReal } from './tempo-real'
 import { jornadaRepo, studioRepo } from './repositorios/equipe'
 import { temSupabase } from './supabase/cliente'
+import { faxinaDoDia } from './manutencao'
 import { ErroDeConfiguracao, ErroDeRegra } from '@/utils/erros'
 
 export { armazenamento } from './storage'
@@ -57,6 +58,7 @@ export * from './atendimento'
 export * from './painel'
 export * from './ocupacao'
 export { conexao, comAcompanhamento, observarRede } from './conexao'
+export { faxinaDoDia } from './manutencao'
 export type { EstadoConexao } from './conexao'
 export * from './sessao'
 
@@ -121,7 +123,33 @@ export function iniciarSistema(): Promise<void> {
     */
     await studioRepo.garantir()
     await jornadaRepo.garantir()
+
+    /*
+      Faxina de fundo, no máximo uma vez por dia.
+
+      `void` de propósito: a abertura do sistema não espera por ela.
+      Manutenção que atrasa a tela é manutenção que alguém desliga.
+    */
+    void faxinaDoDia()
   })()
+
+  /*
+    Uma falha aqui não pode ser definitiva.
+
+    `promessaDeInicio` existe para o preparo rodar uma vez só — mas,
+    guardada mesmo quando dá erro, ela também memoriza o erro. Foi o
+    que aconteceu num caso real: a conta ainda não estava autorizada, a
+    criação da ficha do studio tomou 403, e o sistema nunca mais
+    tentou. Depois de autorizar, a proprietária entrava e continuava
+    sem studio — a tela de Ajustes dizia "não foi possível carregar" e
+    não havia caminho para sair disso pela interface.
+
+    Descartando a promessa que falhou, a próxima abertura tenta de
+    novo. Uma falha passageira volta a ser passageira.
+  */
+  promessaDeInicio.catch(() => {
+    promessaDeInicio = null
+  })
 
   return promessaDeInicio
 }

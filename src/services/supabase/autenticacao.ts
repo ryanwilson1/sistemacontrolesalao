@@ -1,4 +1,6 @@
 import { supabase, temSupabase } from './cliente'
+import { ErroDeEspera } from '@/utils/erros'
+import { ROTAS } from '@/constants/rotas'
 import { ErroDeRegra } from '@/utils/erros'
 
 /**
@@ -101,20 +103,27 @@ export async function pessoaAtual(): Promise<PessoaAutenticada | null> {
 }
 
 export async function recuperarSenha(email: string): Promise<void> {
-  /*
-    O destino é `/nova-senha`, não `/entrar`.
+  const { error } = await supabase().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: `${window.location.origin}${ROTAS.novaSenha}`,
+  })
 
-    Com `/entrar`, o link do e-mail abria uma sessão e a guarda
-    `SomenteVisitante` mandava a pessoa direto para o painel — ela
-    entrava sem nunca ver um campo de senha nova. O link se gastava, a
-    senha antiga continuava valendo e o problema voltava no dia
-    seguinte.
-  */
-  const { error } = await supabase().auth.resetPasswordForEmail(
-    email.trim().toLowerCase(),
-    { redirectTo: `${window.location.origin}/nova-senha` },
-  )
-  if (error) throw new ErroDeRegra(traduzir(error.message))
+  if (error) {
+    /*
+      429 é o limite de envios do Supabase, não uma falha do sistema.
+
+      Ele existe para o sistema não virar ferramenta de inundar a caixa
+      de entrada de terceiros. Traduzir para "aguarde" muda o
+      comportamento de quem lê: com "não foi possível enviar", a reação
+      é clicar de novo — e cada clique renova o bloqueio, prendendo a
+      pessoa num ciclo que ela mesma alimenta.
+    */
+    if (error.status === 429 || /rate|limit|too many/i.test(error.message)) {
+      throw new ErroDeEspera(
+        'Já pedimos um link há pouco. Aguarde cerca de um minuto antes de tentar de novo.',
+      )
+    }
+    throw error
+  }
 }
 
 /**
