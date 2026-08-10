@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { formatarMoedaBR, moedaOuZero } from '@/utils/moeda'
 import { useAviso } from '@/contexts'
 import {
   useAgendar, useAtendentes, useDebounce, useHorariosLivres, useInteressadasNaVaga,
@@ -91,7 +92,7 @@ export function usarFormularioDeAgendamento({
       setModoNovoCliente(!agendamento.clienteId)
       setNovoNome(agendamento.nomeAvulso ?? '')
       setNovoFone(agendamento.telefoneAvulso ?? '')
-      setPreco(String(agendamento.preco))
+      setPreco(formatarMoedaBR(agendamento.preco))
       setDesconto(agendamento.desconto ? String(agendamento.desconto) : '')
       setObservacao(agendamento.observacao ?? '')
       return
@@ -114,7 +115,7 @@ export function usarFormularioDeAgendamento({
   const servico = useMemo(() => servicos?.find((s) => s.id === servicoId), [servicos, servicoId])
 
   useEffect(() => {
-    if (!editando && servico) setPreco(String(servico.preco))
+    if (!editando && servico) setPreco(formatarMoedaBR(servico.preco))
   }, [servico, editando])
 
   const termoBusca = useDebounce(busca)
@@ -181,8 +182,8 @@ export function usarFormularioDeAgendamento({
       const clienteId = await resolverCliente()
 
       const comum = {
-        preco: Number(preco) || 0,
-        desconto: Number(desconto) || 0,
+        preco: moedaOuZero(preco),
+        desconto: moedaOuZero(desconto),
         observacao: limparTexto(observacao) || null,
       }
 

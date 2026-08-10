@@ -5,11 +5,12 @@ import { CarregandoTela, EstadoErro } from '@/components/feedback'
 import { useSessao } from '@/contexts'
 import { useStudio } from '@/hooks'
 import { MeuSalao } from './secoes/MeuSalao'
+import { AlterarSenha } from './secoes/AlterarSenha'
 import { Horarios } from './secoes/Horarios'
 import { Equipe } from './secoes/Equipe'
 import { LinkPublico } from './secoes/LinkPublico'
 
-type Secao = 'salao' | 'horarios' | 'equipe' | 'link'
+type Secao = 'salao' | 'horarios' | 'equipe' | 'link' | 'conta'
 
 /**
  * Ajustes do studio.
@@ -56,6 +57,7 @@ export default function Configuracoes() {
             { valor: 'horarios', rotulo: 'Horários' },
             { valor: 'equipe', rotulo: 'Equipe' },
             { valor: 'link', rotulo: 'Link público' },
+            { valor: 'conta', rotulo: 'Minha conta' },
           ]}
           ativa={secao}
           aoTrocar={setSecao}
@@ -66,6 +68,7 @@ export default function Configuracoes() {
         {secao === 'salao' && <MeuSalao studio={studio} aoSalvar={aoSalvar} />}
         {secao === 'horarios' && <Horarios studio={studio} aoSalvar={aoSalvar} />}
         {secao === 'equipe' && <Equipe />}
+        {secao === 'conta' && <AlterarSenha />}
         {secao === 'link' && <LinkPublico studio={studio} aoSalvar={aoSalvar} />}
       </div>
     </>

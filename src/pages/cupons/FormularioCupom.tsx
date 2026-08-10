@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Botao, Campo, Entrada, Interruptor, Modal } from '@/components/ui'
+import { moedaOuZero, parseMoedaBR } from '@/utils/moeda'
+import { CampoMoeda, Botao, Campo, Entrada, Interruptor, Modal } from '@/components/ui'
 import { useAviso } from '@/contexts'
 import { useSalvarCupom, useServicos } from '@/hooks'
 import { normalizar } from '@/services'
@@ -60,7 +61,7 @@ export function FormularioCupom({
       const texto = limparTexto(descricao, 200)
       if (texto.length < 3) throw new ErroDeRegra('Descreva o cupom.')
 
-      const numero = Number(valor)
+      const numero = parseMoedaBR(valor) ?? Number.NaN
       if (!numero || numero <= 0) throw new ErroDeRegra('O desconto precisa ser maior que zero.')
       if (tipo === 'percentual' && numero > 100) {
         throw new ErroDeRegra('O desconto percentual não pode passar de 100%.')
@@ -78,8 +79,8 @@ export function FormularioCupom({
           validoAte,
           limiteUsos: Number(limiteUsos) || 0,
           servicosIds,
-          valorMinimo: Number(valorMinimo) || 0,
-          descontoMaximo: Number(descontoMaximo) || 0,
+          valorMinimo: moedaOuZero(valorMinimo),
+          descontoMaximo: moedaOuZero(descontoMaximo),
           ativo,
         },
       })
@@ -95,7 +96,7 @@ export function FormularioCupom({
   const exemplo = () => {
     const base = 200
     const bruto = tipo === 'percentual' ? (base * Number(valor || 0)) / 100 : Number(valor || 0)
-    const teto = Number(descontoMaximo) > 0 ? Math.min(bruto, Number(descontoMaximo)) : bruto
+    const teto = moedaOuZero(descontoMaximo) > 0 ? Math.min(bruto, moedaOuZero(descontoMaximo)) : bruto
     const desconto = Math.min(teto, base)
     return `Em um atendimento de ${dinheiro(base)}, desconta ${dinheiro(desconto)} — fica ${dinheiro(base - desconto)}.`
   }
@@ -152,23 +153,13 @@ export function FormularioCupom({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo rotulo={tipo === 'percentual' ? 'Percentual' : 'Valor'} obrigatorio>
-            <Entrada
-              type="number" min="0" step={tipo === 'percentual' ? '1' : '0.01'}
-              max={tipo === 'percentual' ? '100' : undefined} inputMode="decimal"
-              value={valor} onChange={(e) => setValor(e.target.value)}
-              prefixo={<span className="text-[13px]">{tipo === 'percentual' ? '%' : 'R$'}</span>}
-            />
+            <CampoMoeda value={valor} onChange={setValor} />
           </Campo>
           <Campo
             rotulo="Desconto máximo"
             dica={tipo === 'percentual' ? 'Teto em reais. Zero é sem teto.' : 'Não se aplica.'}
           >
-            <Entrada
-              type="number" min="0" step="0.01" inputMode="decimal"
-              value={descontoMaximo} onChange={(e) => setDescontoMaximo(e.target.value)}
-              disabled={tipo === 'fixo'}
-              prefixo={<span className="text-[13px]">R$</span>}
-            />
+            <CampoMoeda value={descontoMaximo} onChange={setDescontoMaximo} disabled={tipo === 'fixo'} />
           </Campo>
         </div>
 
@@ -193,11 +184,7 @@ export function FormularioCupom({
             />
           </Campo>
           <Campo rotulo="Valor mínimo" dica="Do atendimento, para o cupom valer.">
-            <Entrada
-              type="number" min="0" step="0.01" inputMode="decimal"
-              value={valorMinimo} onChange={(e) => setValorMinimo(e.target.value)}
-              prefixo={<span className="text-[13px]">R$</span>}
-            />
+            <CampoMoeda value={valorMinimo} onChange={setValorMinimo} />
           </Campo>
         </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Botao, Campo, Entrada, Modal, Selecao } from '@/components/ui'
+import { moedaOuZero } from '@/utils/moeda'
+import { CampoMoeda, Botao, Campo, Entrada, Modal, Selecao } from '@/components/ui'
 import { useAviso, useSessao } from '@/contexts'
 import { useMovimentarCaixa } from '@/hooks'
 import { FORMA_PAGAMENTO } from '@/constants'
@@ -58,7 +59,7 @@ export function FormularioMovimentoCaixa({
         tipo,
         origem,
         descricao: descricao.trim() || ORIGENS[tipo].find((o) => o.valor === origem)!.rotulo,
-        valor: Number(valor),
+        valor: moedaOuZero(valor),
         forma,
         profissionalId: sessao?.profissionalId ?? null,
       })
@@ -122,12 +123,7 @@ export function FormularioMovimentoCaixa({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo rotulo="Valor" obrigatorio>
-            <Entrada
-              type="number" min="0.01" step="0.01" inputMode="decimal"
-              value={valor} onChange={(e) => setValor(e.target.value)}
-              prefixo={<span className="text-[13px]">R$</span>}
-              autoFocus
-            />
+            <CampoMoeda value={valor} onChange={setValor} />
           </Campo>
 
           <Campo

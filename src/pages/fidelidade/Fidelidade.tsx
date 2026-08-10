@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { formatarMoedaBR, moedaOuZero } from '@/utils/moeda'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Gem, Save } from 'lucide-react'
 import { CabecalhoPagina } from '@/components/common'
-import { Botao, Campo, Carta, CartaTitulo, Entrada, Interruptor, Retrato } from '@/components/ui'
+import { CampoMoeda, Botao, Campo, Carta, CartaTitulo, Entrada, Interruptor, Retrato } from '@/components/ui'
 import { EstadoVazio, EsqueletoLista } from '@/components/feedback'
 import { useAviso } from '@/contexts'
 import {
@@ -28,6 +29,21 @@ export default function Fidelidade() {
   const aviso = useAviso()
 
   const [rascunho, setRascunho] = useState<ConfiguracaoFidelidade>(PADRAO)
+
+  /*
+    O texto do campo anda junto com o número do rascunho.
+
+    O estado guarda número — é o que o banco recebe. Mas o campo
+    precisa guardar texto, senão "0," some no meio da digitação: o
+    número não sabe representar uma vírgula ainda sem centavos.
+  */
+  const [valorDoPontoTexto, setValorDoPontoTexto] = useState('')
+
+  useEffect(() => {
+    setValorDoPontoTexto(formatarMoedaBR(rascunho.valorDoPonto))
+    // Só quando o rascunho vem do banco; a digitação manda no resto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configuracao])
 
   useEffect(() => {
     if (configuracao) setRascunho(configuracao)
@@ -97,13 +113,21 @@ export default function Fidelidade() {
                     : undefined
                 }
               >
-                <Entrada
-                  type="number" min="0" step="0.01" inputMode="decimal"
-                  value={rascunho.valorDoPonto}
-                  onChange={(e) => alterar('valorDoPonto', Number(e.target.value))}
-                  disabled={!rascunho.ativo}
-                  prefixo={<span className="text-[13px]">R$</span>}
-                />
+                {/*
+                    Campo de texto, não numérico.
+
+                    "R$ 0,05 por ponto" é dinheiro, e `type="number"`
+                    recusa a vírgula — a proprietária digitava `0,05` e
+                    o campo não aceitava.
+                  */}
+                  <CampoMoeda
+                    value={valorDoPontoTexto}
+                    onChange={(texto) => {
+                      setValorDoPontoTexto(texto)
+                      alterar('valorDoPonto', moedaOuZero(texto))
+                    }}
+                    disabled={!rascunho.ativo}
+                  />
               </Campo>
 
               <Campo rotulo="Validade dos pontos" dica="Em dias. Deixe vazio para não expirar.">

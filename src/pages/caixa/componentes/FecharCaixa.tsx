@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Check } from 'lucide-react'
-import { Botao, Campo, Entrada, Modal } from '@/components/ui'
+import { CampoMoeda, Botao, Campo, Entrada, Modal } from '@/components/ui'
 import { useAviso, useSessao } from '@/contexts'
 import { useFecharCaixa } from '@/hooks'
 import { dinheiro } from '@/utils/formato'
@@ -85,12 +85,7 @@ export function FecharCaixa({
         </div>
 
         <Campo rotulo="Dinheiro contado na gaveta" obrigatorio>
-          <Entrada
-            type="number" min="0" step="0.01" inputMode="decimal"
-            value={contado} onChange={(e) => setContado(e.target.value)}
-            prefixo={<span className="text-[13px]">R$</span>}
-            autoFocus
-          />
+          <CampoMoeda value={contado} onChange={setContado} />
         </Campo>
 
         {diferenca !== null && (

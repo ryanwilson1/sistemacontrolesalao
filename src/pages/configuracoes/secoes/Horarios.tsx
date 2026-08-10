@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Save } from 'lucide-react'
+import { Save, CalendarPlus } from 'lucide-react'
 import { Botao, Campo, Carta, CartaTitulo, Entrada, Selecao } from '@/components/ui'
 import { useAviso } from '@/contexts'
 import { useJornada, useSalvarJornada, useSalvarStudio } from '@/hooks'
@@ -25,6 +25,27 @@ export function Horarios({ studio, aoSalvar }: { studio: Studio; aoSalvar: () =>
     if (jornadaSalva) setJornada(jornadaSalva)
   }, [jornadaSalva])
 
+  /**
+   * Monta a semana inicial: terça a sábado, 9h às 18h.
+   *
+   * Um ponto de partida plausível para salão, não uma imposição — ela
+   * ajusta tudo na tela seguinte. Sete dias fechados seriam
+   * tecnicamente neutros e inúteis na prática: dariam o mesmo trabalho
+   * e nenhuma pista de por onde começar.
+   */
+  const criarSemanaPadrao = () => {
+    setJornada(
+      Array.from({ length: 7 }, (_, dia) => ({
+        diaSemana: dia,
+        aberto: dia >= 2 && dia <= 6,
+        abre: '09:00',
+        fecha: '18:00',
+        almocoInicio: '12:00',
+        almocoFim: '13:00',
+      })),
+    )
+  }
+
   const alterarDia = (diaSemana: number, mudancas: Partial<JornadaDia>) => {
     setJornada((atual) =>
       atual.map((dia) => (dia.diaSemana === diaSemana ? { ...dia, ...mudancas } : dia)),
@@ -46,6 +67,36 @@ export function Horarios({ studio, aoSalvar }: { studio: Studio; aoSalvar: () =>
         segunda falhar, a primeira é desfeita e a proprietária recebe a
         configuração exatamente como estava — nada pela metade.
       */
+      /*
+        As regras do agendamento, conferidas antes de gravar.
+
+        Sem isto, uma antecedência de 100000 minutos (setenta dias)
+        entrava sem aviso — e o link público parava de oferecer
+        qualquer horário, sem nada na tela ligando uma coisa à outra.
+      */
+      const ant = Number(antecedencia) || 0
+      if (ant < 0 || ant > 10080) {
+        throw new ErroDeRegra('A antecedência deve ficar entre 0 e 7 dias (10080 minutos).')
+      }
+
+      const hor = Number(horizonte) || 0
+      if (hor < 1 || hor > 365) {
+        throw new ErroDeRegra('O horizonte deve ficar entre 1 e 365 dias.')
+      }
+
+      for (const dia of jornada) {
+        if (dia.aberto && dia.abre >= dia.fecha) {
+          throw new ErroDeRegra(
+            `${DIAS_SEMANA[dia.diaSemana]}: o horário de fechar precisa vir depois do de abrir.`,
+          )
+        }
+        if (dia.aberto && dia.almocoInicio && dia.almocoFim && dia.almocoInicio >= dia.almocoFim) {
+          throw new ErroDeRegra(
+            `${DIAS_SEMANA[dia.diaSemana]}: confira o intervalo de almoço.`,
+          )
+        }
+      }
+
       const jornadaAnterior = [...(jornadaSalva ?? [])]
 
       await salvarJornada.executar(jornada)
@@ -88,6 +139,32 @@ export function Horarios({ studio, aoSalvar }: { studio: Studio; aoSalvar: () =>
             {Array.from({ length: 7 }).map((_, indice) => (
               <div key={indice} className="h-14 animate-pulse rounded-xl bg-quartzo-100" />
             ))}
+          </div>
+        ) : jornada.length === 0 ? (
+          /*
+            A semana ainda não existe no banco.
+
+            Antes, este caso desenhava uma lista vazia — o cartão
+            "Funcionamento" aparecia com o subtítulo e mais nada abaixo.
+            Quem olhava não concluía "preciso criar os dias"; concluía
+            que a tela estava quebrada, e não havia botão nenhum para
+            tentar.
+
+            Acontece de verdade: se a linha do studio for criada por
+            fora (pelo SQL, por exemplo), a jornada não vem junto.
+          */
+          <div className="rounded-xl border border-dashed border-onix-200 p-6 text-center">
+            <p className="text-[14px] font-medium text-onix-700">
+              Os dias de funcionamento ainda não foram definidos
+            </p>
+            <p className="mx-auto mt-1.5 max-w-sm text-[13px] leading-relaxed text-onix-400">
+              Sem isso o link público não oferece horário nenhum. Comece com uma semana
+              comum e ajuste o que for diferente.
+            </p>
+
+            <Botao variante="ouro" className="mt-4" onClick={criarSemanaPadrao}>
+              <CalendarPlus className="h-4 w-4" /> Criar semana de trabalho
+            </Botao>
           </div>
         ) : (
           <div className="space-y-2">

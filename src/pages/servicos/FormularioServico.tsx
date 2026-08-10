@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import {
+import { formatarMoedaBR, moedaOuZero } from '@/utils/moeda'
+import { CampoMoeda,
   AreaTexto, Botao, Campo, Entrada, Interruptor, Modal, Selecao, SeletorDeCor,
 } from '@/components/ui'
 import { useAviso } from '@/contexts'
@@ -44,7 +45,7 @@ export function FormularioServico({
     setDescricao(servico?.descricao ?? '')
     setDuracao(String(servico?.duracaoMinutos ?? 40))
     setIntervalo(String(servico?.intervaloMinutos ?? 0))
-    setPreco(servico ? String(servico.preco) : '')
+    setPreco(servico ? formatarMoedaBR(servico.preco) : '')
     setCor(servico?.cor ?? CORES_DISPONIVEIS[0])
     setNoLink(servico?.noLinkPublico ?? true)
     setAtivo(servico?.ativo ?? true)
@@ -62,10 +63,36 @@ export function FormularioServico({
       const nomeLimpo = limparNome(nome)
       if (nomeLimpo.length < 2) throw new ErroDeRegra('Informe o nome do serviço.')
 
+      /*
+        O teto também é validado — não só o piso.
+
+        `max="720"` no HTML impede a setinha de subir além disso e não
+        impede ninguém de digitar. Um serviço de 900 minutos entrava
+        sem reclamação: quinze horas, mais do que o salão fica aberto.
+        O efeito é a agenda parar de oferecer horário para aquele
+        serviço, sem que nada na tela explique por quê.
+
+        A regra do teto vale mais do que a do piso: errar para baixo
+        salta aos olhos no primeiro agendamento; errar para cima só
+        aparece quando a cliente diz que não achou horário.
+      */
       const minutos = Number(duracao)
       if (!minutos || minutos < 5) {
         throw new ErroDeRegra('A duração precisa ser de pelo menos 5 minutos.')
       }
+      if (minutos > 720) {
+        throw new ErroDeRegra(
+          'A duração passou de 12 horas. Confira o valor — está em minutos.',
+        )
+      }
+
+      const folga = Number(intervalo) || 0
+      if (folga < 0 || folga > 120) {
+        throw new ErroDeRegra('O intervalo deve ficar entre 0 e 120 minutos.')
+      }
+
+      const valor = moedaOuZero(preco)
+      if (valor < 0) throw new ErroDeRegra('O preço não pode ser negativo.')
 
       let categoriaFinal = categoriaId || null
       if (novaCategoria.trim()) {
@@ -81,7 +108,7 @@ export function FormularioServico({
           descricao: limparTexto(descricao, 1000) || null,
           duracaoMinutos: minutos,
           intervaloMinutos: Number(intervalo) || 0,
-          preco: Number(preco) || 0,
+          preco: moedaOuZero(preco),
           cor,
           noLinkPublico: noLink,
           ativo,
@@ -161,11 +188,7 @@ export function FormularioServico({
             />
           </Campo>
           <Campo rotulo="Preço" obrigatorio>
-            <Entrada
-              type="number" min="0" step="0.01" inputMode="decimal"
-              value={preco} onChange={(e) => setPreco(e.target.value)}
-              prefixo={<span className="text-[13px]">R$</span>}
-            />
+            <CampoMoeda value={preco} onChange={setPreco} />
           </Campo>
         </div>
 

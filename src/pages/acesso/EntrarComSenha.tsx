@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { KeyRound, LogIn, Mail } from 'lucide-react'
-import { Botao, Campo, Entrada } from '@/components/ui'
+import { LogIn, Mail } from 'lucide-react'
+import { CampoSenha, Botao, Campo, Entrada } from '@/components/ui'
 import { useAviso, useSessao } from '@/contexts'
 import { recuperarSenha } from '@/services'
-import { mensagemDeErro } from '@/utils/erros'
+import { ErroDeEspera, mensagemDeErro } from '@/utils/erros'
 
 /**
  * Entrada com e-mail e senha.
@@ -21,6 +21,7 @@ export function EntrarComSenha() {
   const [senha, setSenha] = useState('')
   const [entrando, setEntrando] = useState(false)
   const [esquecida, setEsquecida] = useState(false)
+  const [enviandoLink, setEnviandoLink] = useState(false)
 
   const enviar = async () => {
     if (!email.includes('@') || senha.length < 6) {
@@ -44,13 +45,43 @@ export function EntrarComSenha() {
       return
     }
 
+    setEnviandoLink(true)
     try {
       await recuperarSenha(email)
-      setEsquecida(true)
-      aviso.sucesso('Link enviado', 'Confira sua caixa de entrada.')
+      confirmarPedido()
     } catch (falha) {
-      aviso.erro('Não foi possível enviar', mensagemDeErro(falha))
+      /*
+        Duas famílias de erro, dois tratamentos.
+
+        O 429 é o servidor pedindo tempo — e precisa ser dito. Sem
+        isso a pessoa clica de novo, e cada clique renova o bloqueio:
+        ela fica presa num ciclo que alimenta sozinha. Aqui o botão
+        volta a ficar disponível, porque ela vai querer tentar depois.
+
+        Qualquer outro erro vira a MESMA mensagem de sucesso, de
+        propósito. Avisar "este e-mail não está cadastrado"
+        transformaria a tela num verificador de contas: alguém testa
+        endereços até achar o do salão, e daí parte para adivinhar
+        senha. Quem tem conta recebe o link; quem não tem, não recebe
+        nada — e ninguém aprende nada pela tela.
+      */
+      if (falha instanceof ErroDeEspera) {
+        aviso.erro('Aguarde um instante', mensagemDeErro(falha))
+      } else {
+        confirmarPedido()
+      }
+    } finally {
+      setEnviandoLink(false)
     }
+  }
+
+  /** A resposta é a mesma exista ou não conta com aquele e-mail. */
+  const confirmarPedido = () => {
+    setEsquecida(true)
+    aviso.sucesso(
+      'Verifique seu e-mail',
+      'Se houver uma conta com este endereço, o link de nova senha chega em instantes.',
+    )
   }
 
   return (
@@ -66,12 +97,11 @@ export function EntrarComSenha() {
       </Campo>
 
       <Campo rotulo="Senha" obrigatorio>
-        <Entrada
-          type="password" value={senha} autoComplete="current-password"
+        <CampoSenha
+          value={senha} autoComplete="current-password"
           onChange={(e) => setSenha(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && void enviar()}
           placeholder="••••••••"
-          prefixo={<KeyRound className="h-4 w-4" />}
         />
       </Campo>
 
@@ -80,10 +110,16 @@ export function EntrarComSenha() {
       </Botao>
 
       <button
+        type="button"
         onClick={() => void recuperar()}
-        className="w-full text-center text-[13px] text-onix-400 transition-colors hover:text-onix-800"
+        disabled={enviandoLink || esquecida}
+        className="min-h-[44px] w-full text-center text-[13px] text-onix-400 transition-colors hover:text-onix-800 disabled:cursor-default disabled:text-onix-300"
       >
-        {esquecida ? 'Link enviado — confira seu e-mail' : 'Esqueci minha senha'}
+        {enviandoLink
+          ? 'Enviando…'
+          : esquecida
+            ? 'Link enviado — confira seu e-mail'
+            : 'Esqueci minha senha'}
       </button>
 
       <p className="rounded-xl border border-onix-100 bg-quartzo-50 p-3.5 text-[12.5px] leading-relaxed text-onix-500">

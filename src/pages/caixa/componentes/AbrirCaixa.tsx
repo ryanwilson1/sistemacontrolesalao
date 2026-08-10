@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { moedaOuZero } from '@/utils/moeda'
 import { Wallet } from 'lucide-react'
-import { Botao, Campo, Carta, Entrada } from '@/components/ui'
+import { CampoMoeda, Botao, Campo, Carta, Entrada } from '@/components/ui'
 import { useAviso, useSessao } from '@/contexts'
 import { useAbrirCaixa } from '@/hooks'
 import { dataLonga } from '@/utils/datas'
@@ -24,7 +25,7 @@ export function AbrirCaixa({ aoAbrir }: { aoAbrir: () => void }) {
     if (!sessao) return
     try {
       await abrir.executar({
-        valorAbertura: Number(valor) || 0,
+        valorAbertura: moedaOuZero(valor),
         responsavelId: sessao.profissionalId,
         observacoes: observacoes.trim() || null,
       })
@@ -54,12 +55,7 @@ export function AbrirCaixa({ aoAbrir }: { aoAbrir: () => void }) {
           rotulo="Troco inicial"
           dica="Quanto há em dinheiro na gaveta agora. É a base da conferência no fechamento."
         >
-          <Entrada
-            type="number" min="0" step="0.01" inputMode="decimal"
-            value={valor} onChange={(e) => setValor(e.target.value)}
-            prefixo={<span className="text-[13px]">R$</span>}
-            autoFocus
-          />
+          <CampoMoeda value={valor} onChange={setValor} />
         </Campo>
 
         <Campo rotulo="Observação">

@@ -1,12 +1,11 @@
-import { useState } from 'react'
-import { Database, RotateCcw } from 'lucide-react'
-import { Botao, Carta, CartaTitulo, Etiqueta, Interruptor } from '@/components/ui'
+import { Link } from 'react-router-dom'
+import { ROTAS } from '@/constants'
+import { Database } from 'lucide-react'
+import { Carta, CartaTitulo, Etiqueta, Interruptor } from '@/components/ui'
 import { CompartilharLink } from '@/components/common'
-import { Confirmar } from '@/components/feedback'
 import { useAviso } from '@/contexts'
 import { useSalvarStudio } from '@/hooks'
-import { armazenamento, reiniciarDados } from '@/services'
-import { cache } from '@/hooks/dados/cache'
+import { armazenamento } from '@/services'
 import { APP } from '@/constants'
 import { mensagemDeErro } from '@/utils/erros'
 import type { Studio } from '@/types'
@@ -31,18 +30,7 @@ export function LinkPublico({ studio, aoSalvar }: { studio: Studio; aoSalvar: ()
     }
   }
 
-  const [confirmando, setConfirmando] = useState(false)
 
-  const reiniciar = async () => {
-    setConfirmando(false)
-    try {
-      await reiniciarDados()
-      cache.limpar()
-      aviso.sucesso('Dados reiniciados', 'A demonstração voltou ao estado inicial.')
-    } catch (falha) {
-      aviso.erro('Não foi possível reiniciar', mensagemDeErro(falha))
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -102,16 +90,30 @@ export function LinkPublico({ studio, aoSalvar }: { studio: Studio; aoSalvar: ()
             </Etiqueta>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-onix-100 p-3.5">
-            <div className="min-w-0">
-              <p className="text-[13.5px] font-medium text-onix-800">Reiniciar demonstração</p>
-              <p className="text-[12.5px] leading-snug text-onix-400">
-                Restaura os dados de exemplo do começo.
-              </p>
-            </div>
-            <Botao variante="secundario" tamanho="sm" onClick={() => setConfirmando(true)}>
-              <RotateCcw className="h-3.5 w-3.5" /> Reiniciar
-            </Botao>
+          {/*
+            O botão "Reiniciar demonstração" saiu daqui.
+
+            Ele chamava `reiniciarDados()`, que passou a lançar erro
+            quando a demonstração foi removida do produto. O resultado
+            era o pior tipo de botão: visível, clicável, com aparência
+            de funcionar — e recusando toda vez, com uma mensagem que
+            não explicava por quê.
+
+            No lugar, o que a proprietária de fato precisa saber sobre
+            os dados dela. Apagar tudo continua possível pelo painel do
+            Supabase, com backup na mão, que é onde uma operação
+            irreversível deve morar.
+          */}
+          <div className="rounded-xl border border-onix-100 p-3.5">
+            <p className="text-[13.5px] font-medium text-onix-800">Onde ficam seus dados</p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-onix-400">
+              Clientes, agenda e histórico ficam no servidor e acompanham você em
+              qualquer aparelho. Para guardar uma cópia no computador, use{' '}
+              <Link to={ROTAS.backup} className="text-marca underline-offset-2 hover:underline">
+                Backup
+              </Link>
+              .
+            </p>
           </div>
         </div>
 
@@ -122,19 +124,6 @@ export function LinkPublico({ studio, aoSalvar }: { studio: Studio; aoSalvar: ()
 
       {/* Um clique não pode apagar o studio inteiro. A frase diz o que
           se perde, não só que a ação é perigosa. */}
-      <Confirmar
-        aberto={confirmando}
-        aoFechar={() => setConfirmando(false)}
-        aoConfirmar={() => void reiniciar()}
-        titulo="Apagar tudo e voltar à demonstração?"
-        descricao={
-          'Clientes, agendamentos, serviços, financeiro e histórico deste aparelho ' +
-          'serão apagados e substituídos pelos dados de exemplo. Não há como desfazer. ' +
-          'Faça um backup antes, em Backup → Exportar.'
-        }
-        rotuloConfirmar="Apagar tudo"
-        destrutivo
-      />
     </div>
   )
 }

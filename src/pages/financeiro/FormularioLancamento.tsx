@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Botao, Campo, Entrada, Modal, Selecao } from '@/components/ui'
+import { parseMoedaBR } from '@/utils/moeda'
+import { CampoMoeda, Botao, Campo, Entrada, Modal, Selecao } from '@/components/ui'
 import { useAviso } from '@/contexts'
 import { useSalvarLancamento } from '@/hooks'
 import { FORMA_PAGAMENTO } from '@/constants'
@@ -43,7 +44,7 @@ export function FormularioLancamento({
       const texto = limparTexto(descricao, 200)
       if (texto.length < 2) throw new ErroDeRegra('Descreva o lançamento.')
 
-      const numero = Number(valor)
+      const numero = parseMoedaBR(valor) ?? Number.NaN
       if (!numero || numero <= 0) throw new ErroDeRegra('Informe um valor maior que zero.')
 
       await salvar.executar({
@@ -115,11 +116,7 @@ export function FormularioLancamento({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo rotulo="Valor" obrigatorio>
-            <Entrada
-              type="number" min="0.01" step="0.01" inputMode="decimal"
-              value={valor} onChange={(e) => setValor(e.target.value)}
-              prefixo={<span className="text-[13px]">R$</span>}
-            />
+            <CampoMoeda value={valor} onChange={setValor} />
           </Campo>
           <Campo rotulo="Data">
             <Entrada type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} />

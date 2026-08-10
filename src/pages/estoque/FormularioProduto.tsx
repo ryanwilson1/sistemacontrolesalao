@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Botao, Campo, Entrada, Interruptor, Modal, Selecao } from '@/components/ui'
+import { formatarMoedaBR, moedaOuZero } from '@/utils/moeda'
+import { CampoMoeda, Botao, Campo, Entrada, Interruptor, Modal, Selecao } from '@/components/ui'
 import { useAviso } from '@/contexts'
 import { useMovimentarEstoque, useSalvarProduto } from '@/hooks'
 import { UNIDADES } from '@/constants'
@@ -40,8 +41,8 @@ export function FormularioProduto({
     setUnidade(produto?.unidade ?? UNIDADES[0])
     setQuantidade(String(produto?.quantidade ?? 0))
     setMinimo(String(produto?.quantidadeMinima ?? 1))
-    setCusto(produto ? String(produto.precoCusto) : '')
-    setVenda(produto ? String(produto.precoVenda) : '')
+    setCusto(produto ? formatarMoedaBR(produto.precoCusto) : '')
+    setVenda(produto ? formatarMoedaBR(produto.precoVenda) : '')
     setValidade(produto?.validade ?? '')
     setAtivo(produto?.ativo ?? true)
   }, [aberto, produto])
@@ -50,6 +51,32 @@ export function FormularioProduto({
     try {
       const nomeLimpo = limparNome(nome)
       if (nomeLimpo.length < 2) throw new ErroDeRegra('Informe o nome do produto.')
+
+      /*
+        Números do estoque, conferidos antes de gravar.
+
+        Só o nome era validado. Quantidade negativa, estoque mínimo
+        absurdo e preço de venda menor que o custo entravam sem
+        reclamação — e o último é o que dói: o relatório de margem
+        passa a mostrar prejuízo em cada venda, e ninguém liga o
+        resultado ao dia em que o preço foi digitado errado.
+      */
+      const qtd = Number(quantidade) || 0
+      if (qtd < 0) throw new ErroDeRegra('A quantidade não pode ser negativa.')
+
+      const min = Number(minimo) || 0
+      if (min < 0) throw new ErroDeRegra('O estoque mínimo não pode ser negativo.')
+
+      const vCusto = moedaOuZero(custo)
+      const vVenda = moedaOuZero(venda)
+      if (vCusto < 0 || vVenda < 0) {
+        throw new ErroDeRegra('Os preços não podem ser negativos.')
+      }
+      if (vVenda > 0 && vCusto > 0 && vVenda < vCusto) {
+        throw new ErroDeRegra(
+          'O preço de venda está abaixo do custo. Confira os dois valores.',
+        )
+      }
 
       await salvar.executar({
         id: produto?.id,
@@ -77,11 +104,11 @@ export function FormularioProduto({
           */
           quantidade: produto ? produto.quantidade : Number(quantidade) || 0,
           quantidadeMinima: Number(minimo) || 0,
-          precoCusto: Number(custo) || 0,
+          precoCusto: moedaOuZero(custo),
           // O custo médio só é recalculado por entrada de estoque; aqui
           // apenas acompanha o cadastro inicial.
-          precoMedio: produto?.precoMedio ?? (Number(custo) || 0),
-          precoVenda: Number(venda) || 0,
+          precoMedio: produto?.precoMedio ?? moedaOuZero(custo),
+          precoVenda: moedaOuZero(venda),
           validade: validade || null,
           ativo,
         },
@@ -183,18 +210,10 @@ export function FormularioProduto({
 
         <div className="grid gap-4 sm:grid-cols-3">
           <Campo rotulo="Preço de custo">
-            <Entrada
-              type="number" min="0" step="0.01" inputMode="decimal"
-              value={custo} onChange={(e) => setCusto(e.target.value)}
-              prefixo={<span className="text-[13px]">R$</span>}
-            />
+            <CampoMoeda value={custo} onChange={setCusto} />
           </Campo>
           <Campo rotulo="Preço de venda">
-            <Entrada
-              type="number" min="0" step="0.01" inputMode="decimal"
-              value={venda} onChange={(e) => setVenda(e.target.value)}
-              prefixo={<span className="text-[13px]">R$</span>}
-            />
+            <CampoMoeda value={venda} onChange={setVenda} />
           </Campo>
           <Campo rotulo="Validade">
             <Entrada type="date" value={validade} onChange={(e) => setValidade(e.target.value)} />

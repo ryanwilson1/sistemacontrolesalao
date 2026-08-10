@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Botao, Campo, Entrada, Modal } from '@/components/ui'
+import { moedaOuZero } from '@/utils/moeda'
+import { Botao, Campo, CampoMoeda, Modal } from '@/components/ui'
 import { useAviso } from '@/contexts'
 import { useDefinirMeta } from '@/hooks'
 import { mesAno } from '@/utils/datas'
@@ -23,7 +24,7 @@ export function FormularioMeta({
 
   const enviar = async () => {
     try {
-      await definir.executar({ referencia: mesReferencia, valor: Number(valor) || 0 })
+      await definir.executar({ referencia: mesReferencia, valor: moedaOuZero(valor) })
       aviso.sucesso('Meta definida', mesAno(mesReferencia))
       aoFechar()
     } catch (falha) {
@@ -49,12 +50,7 @@ export function FormularioMeta({
       }
     >
       <Campo rotulo="Quanto você quer faturar" dica="Aparece como barra de progresso no painel.">
-        <Entrada
-          type="number" min="0" step="100" inputMode="decimal"
-          value={valor} onChange={(e) => setValor(e.target.value)}
-          prefixo={<span className="text-[13px]">R$</span>}
-          autoFocus
-        />
+        <CampoMoeda value={valor} onChange={setValor} />
       </Campo>
     </Modal>
   )

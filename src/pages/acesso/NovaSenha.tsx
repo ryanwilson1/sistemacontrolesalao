@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { KeyRound, ShieldCheck } from 'lucide-react'
 import { LayoutAcesso } from '@/layouts'
-import { Botao, Campo, Entrada } from '@/components/ui'
+import { Botao, Campo, CampoSenha } from '@/components/ui'
 import { CarregandoTela } from '@/components/feedback'
 import { useAviso } from '@/contexts'
 import { definirNovaSenha, sessaoDeRecuperacao } from '@/services'
@@ -108,26 +107,39 @@ export default function NovaSenha() {
     >
       <div className="space-y-4">
         <Campo rotulo="Nova senha" obrigatorio dica="No mínimo 8 caracteres.">
-          <Entrada
-            type="password"
+          <CampoSenha
             value={senha}
             autoFocus
             autoComplete="new-password"
             onChange={(e) => setSenha(e.target.value)}
             placeholder="••••••••"
-            prefixo={<KeyRound className="h-4 w-4" />}
           />
         </Campo>
 
-        <Campo rotulo="Repita a senha" obrigatorio>
-          <Entrada
-            type="password"
+        <Campo
+          rotulo="Repita a senha"
+          obrigatorio
+          /*
+            O aviso aparece enquanto ela digita, não só ao enviar.
+
+            Descobrir que as senhas não batem depois de tocar em salvar
+            significa redigitar as duas — e num teclado de celular, com
+            o texto escondido, a segunda tentativa erra tanto quanto a
+            primeira.
+          */
+          erro={
+            repetida.length > 0 && senha !== repetida
+              ? 'As senhas não coincidem.'
+              : undefined
+          }
+        >
+          <CampoSenha
             value={repetida}
             autoComplete="new-password"
             onChange={(e) => setRepetida(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && void salvar()}
             placeholder="••••••••"
-            prefixo={<ShieldCheck className="h-4 w-4" />}
+            erro={repetida.length > 0 && senha !== repetida}
           />
         </Campo>
 
