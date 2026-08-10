@@ -1,9 +1,8 @@
 import { armazenamento } from './storage'
 import { tempoReal } from './tempo-real'
-import { carregarDemonstracao } from './seed'
 import { jornadaRepo, studioRepo } from './repositorios/equipe'
 import { temSupabase } from './supabase/cliente'
-import { ErroDeRegra } from '@/utils/erros'
+import { ErroDeConfiguracao, ErroDeRegra } from '@/utils/erros'
 
 export { armazenamento } from './storage'
 export type { AdaptadorDeArmazenamento, Colecao } from './storage'
@@ -60,7 +59,6 @@ export * from './ocupacao'
 export { conexao, comAcompanhamento, observarRede } from './conexao'
 export type { EstadoConexao } from './conexao'
 export * from './sessao'
-export { carregarDemonstracao } from './seed'
 
 /**
  * Ponto único de partida do sistema.
@@ -83,51 +81,60 @@ let promessaDeInicio: Promise<void> | null = null
 
 export function iniciarSistema(): Promise<void> {
   promessaDeInicio ??= (async () => {
+    /*
+      Sem banco, o sistema não abre. E isso é a correção, não a falha.
+
+      Antes ele caía no armazenamento do navegador e carregava dados de
+      demonstração. Num deploy com as variáveis de ambiente faltando —
+      que é fácil de acontecer, porque elas entram no build e não em
+      execução — o efeito era o pior possível: a proprietária via um
+      salão funcionando, com agendamentos, faturamento e clientes, e
+      concluía que estava tudo certo.
+
+      Nada daquilo existia. Os dados moravam só naquele celular, o link
+      público não abria para ninguém, e a descoberta viria dias depois,
+      quando alguma cliente reclamasse de um horário que o salão não
+      tinha.
+
+      Recusar na cara é a única resposta honesta. A tela diz exatamente
+      o que falta, e o sistema só começa quando o banco responde.
+    */
+    if (!temSupabase()) {
+      throw new ErroDeConfiguracao(
+        'O sistema não está conectado ao banco de dados.',
+      )
+    }
+
     await armazenamento.iniciar()
     tempoReal.iniciar()
 
-    // Com banco, a demonstração não entra. Nunca.
-    if (temSupabase()) {
-      /*
-        Com banco, nada de demonstração — mas também não dá para deixar
-        o sistema sem chão.
+    /*
+      A ficha em branco do primeiro acesso.
 
-        A ficha em branco é o mínimo para a proprietária conseguir
-        começar: sem linha na tabela `studio`, a tela de Configurações
-        mostrava erro e não havia como criar o studio pela interface.
-        Ela abria o sistema e não conseguia dar o primeiro passo.
+      Não é demonstração. Sem linha na tabela `studio`, a tela de
+      Configurações mostrava erro e não havia como criar o studio pela
+      interface — a proprietária abria o sistema e não conseguia dar o
+      primeiro passo.
 
-        `garantir` cria uma ficha vazia com o agendamento PAUSADO, não
-        um salão fictício. Nenhuma cliente, nenhum serviço, nenhum
-        agendamento inventado — só o registro que as telas precisam
-        para existir.
-      */
-      await studioRepo.garantir()
-      await jornadaRepo.garantir()
-      return
-    }
-
-    const studio = await studioRepo.ler()
-    if (!studio) await carregarDemonstracao()
+      O que entra aqui é um registro vazio, com o agendamento PAUSADO.
+      Nenhuma cliente, nenhum serviço, nenhum agendamento inventado.
+    */
+    await studioRepo.garantir()
+    await jornadaRepo.garantir()
   })()
 
   return promessaDeInicio
 }
 
 /**
- * Recomeça do zero. Usado no botão de reiniciar dados.
+ * Antes recarregava a demonstração.
  *
- * Só existe sem banco, onde "tudo" é o que está neste aparelho. Com
- * banco, apagar o studio inteiro é operação de painel do Supabase, com
- * backup na mão — não um botão dentro do produto.
+ * A demonstração deixou de existir, e apagar a agenda de um salão de
+ * verdade não pode ser um botão dentro do produto — com o backup
+ * dependendo da sorte de alguém ter exportado antes.
  */
 export async function reiniciarDados(): Promise<void> {
-  if (temSupabase()) {
-    throw new ErroDeRegra(
-      'Com banco de dados ligado, recomeçar do zero é feito pelo painel do Supabase. ' +
-      'Assim ninguém apaga um studio inteiro por engano.',
-    )
-  }
-  await armazenamento.limpar()
-  await carregarDemonstracao()
+  throw new ErroDeRegra(
+    'Para recomeçar do zero, use o painel do Supabase — com um backup exportado antes.',
+  )
 }
