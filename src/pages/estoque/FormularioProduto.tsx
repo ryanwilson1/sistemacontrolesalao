@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Botao, Campo, Entrada, Interruptor, Modal, Selecao } from '@/components/ui'
 import { useAviso } from '@/contexts'
-import { useSalvarProduto } from '@/hooks'
+import { useMovimentarEstoque, useSalvarProduto } from '@/hooks'
 import { UNIDADES } from '@/constants'
 import { limparNome } from '@/utils/sanitizar'
 import { ErroDeRegra, mensagemDeErro } from '@/utils/erros'
@@ -15,6 +15,7 @@ export function FormularioProduto({
   produto?: Produto | null
 }) {
   const salvar = useSalvarProduto()
+  const movimentar = useMovimentarEstoque()
   const aviso = useAviso()
   const editando = !!produto
 
@@ -59,7 +60,21 @@ export function FormularioProduto({
           marca: marca.trim() || null,
           categoria: categoria.trim() || null,
           unidade,
-          // Ao editar, o saldo só muda por movimentação — nunca no formulário.
+          /*
+            O saldo não é gravado direto na edição — mas o campo também
+            não fica cinza.
+
+            Bloquear era defensável no papel: o saldo é derivado das
+            movimentações, e escrever por cima quebraria o histórico. Na
+            prática, tirava a autonomia de quem faz a contagem física e
+            encontra 8 onde o sistema diz 10. Ela via o número errado,
+            não podia corrigir, e nada explicava o caminho.
+
+            Agora ela digita o número certo e o sistema registra a
+            diferença como um **ajuste** logo abaixo — o saldo passa a
+            bater e o histórico continua contando a verdade sobre como
+            chegou lá.
+          */
           quantidade: produto ? produto.quantidade : Number(quantidade) || 0,
           quantidadeMinima: Number(minimo) || 0,
           precoCusto: Number(custo) || 0,
@@ -71,6 +86,21 @@ export function FormularioProduto({
           ativo,
         },
       })
+
+      /* Correção de saldo na contagem física: entra como ajuste. */
+      if (produto) {
+        const desejado = Number(quantidade) || 0
+        const diferenca = Number((desejado - produto.quantidade).toFixed(3))
+
+        if (diferenca !== 0) {
+          await movimentar.executar({
+            produtoId: produto.id,
+            tipo: diferenca > 0 ? 'entrada' : 'saida',
+            quantidade: Math.abs(diferenca),
+            motivo: 'Ajuste de contagem',
+          })
+        }
+      }
 
       aviso.sucesso(editando ? 'Produto atualizado' : 'Produto cadastrado', nomeLimpo)
       aoFechar()
@@ -131,12 +161,15 @@ export function FormularioProduto({
 
           <Campo
             rotulo={editando ? 'Saldo atual' : 'Quantidade inicial'}
-            dica={editando ? 'Altere por movimentação' : undefined}
+            dica={
+              editando
+                ? 'Pode corrigir aqui. A diferença entra como ajuste no histórico.'
+                : undefined
+            }
           >
             <Entrada
               type="number" min="0" step="0.001" inputMode="decimal"
               value={quantidade} onChange={(e) => setQuantidade(e.target.value)}
-              disabled={editando}
             />
           </Campo>
 

@@ -10,19 +10,28 @@ import { mensagemDeErro } from '@/utils/erros'
 import type { ModeloAvulso } from '@/services'
 import type { ModeloMensagem } from '@/types'
 
-/** Exemplo fixo, para a pessoa ver o resultado enquanto escreve. */
+/*
+  Exemplo para a pessoa ver o resultado enquanto escreve o modelo.
+
+  Os nomes são propositalmente genéricos. Antes eram "Beatriz Almeida",
+  "Emely Barbosa" e um endereço com número — pareciam dados de gente de
+  verdade, e num sistema entregue a um salão isso confunde: a
+  proprietária não sabe se aquilo é cliente dela ou enfeite.
+
+  O que aparece aqui é claramente um espaço reservado.
+*/
 const EXEMPLO = {
-  cliente: 'Beatriz Almeida',
-  clienteCompleto: 'Beatriz Almeida',
-  servico: 'Progressiva',
-  profissional: 'Emely Barbosa',
+  cliente: 'Cliente',
+  clienteCompleto: 'Nome da cliente',
+  servico: 'Serviço',
+  profissional: 'Profissional',
   inicio: new Date(Date.now() + 86_400_000).toISOString(),
-  valor: 350,
-  studio: 'Emely Barbosa Studio de Beleza',
-  endereco: 'Rua das Acácias, 128 — Centro',
-  telefone: '11987654321',
-  protocolo: 'K7M2XP',
-  chavePix: 'emely@studio.com.br',
+  valor: 100,
+  studio: 'Seu salão',
+  endereco: 'Endereço do salão',
+  telefone: '11900000000',
+  protocolo: 'ABC123',
+  chavePix: 'chave-pix@salao',
 }
 
 export function Modelos() {

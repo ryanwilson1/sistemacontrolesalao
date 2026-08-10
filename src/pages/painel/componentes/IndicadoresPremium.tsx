@@ -67,9 +67,20 @@ export function Taxa({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: atraso * 0.05 }}
-      className="flex min-w-0 items-center gap-4 rounded-2xl border border-onix-100 bg-white p-4 shadow-carta sm:p-5"
+      /*
+        Empilhado no celular, lado a lado a partir de `sm`.
+
+        Com o círculo de 68px ao lado do texto numa coluna de metade da
+        tela de um iPhone, sobravam ~90px para a palavra — e "Ocupação
+        da agenda" virava seis linhas, uma palavra por linha, com o
+        detalhe abaixo espremido do mesmo jeito.
+
+        O anel também encolhe no celular: 56px continua legível e
+        devolve espaço para o texto.
+      */
+      className="flex min-w-0 flex-col items-start gap-2.5 rounded-2xl border border-onix-100 bg-white p-4 shadow-carta sm:flex-row sm:items-center sm:gap-4 sm:p-5"
     >
-      <span className="relative grid h-[68px] w-[68px] shrink-0 place-items-center">
+      <span className="relative grid h-14 w-14 shrink-0 place-items-center sm:h-[68px] sm:w-[68px]">
         <svg viewBox="0 0 64 64" className="absolute inset-0 -rotate-90">
           <circle cx="32" cy="32" r={raio} fill="none" stroke="#F0E3E4" strokeWidth="6" />
           <motion.circle
@@ -81,7 +92,7 @@ export function Taxa({
             transition={{ duration: 0.9, ease: [0.2, 0.8, 0.2, 1] }}
           />
         </svg>
-        <span className="tabular relative font-display text-[15px] font-medium text-onix-900">
+        <span className="tabular relative font-display text-[14px] font-medium text-onix-900 sm:text-[15px]">
           {Math.round(proporcao * 100)}%
         </span>
       </span>

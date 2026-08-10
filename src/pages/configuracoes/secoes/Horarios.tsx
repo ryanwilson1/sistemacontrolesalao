@@ -153,13 +153,31 @@ export function Horarios({ studio, aoSalvar }: { studio: Studio; aoSalvar: () =>
                       <Entrada
                         type="time" value={dia.almocoInicio ?? ''}
                         onChange={(e) => alterarDia(dia.diaSemana, { almocoInicio: e.target.value || null })}
-                        className="h-8 w-[100px] px-2 text-[12.5px]"
+                        /*
+                          44px no celular, compacto a partir de `sm`.
+
+                          32px de altura com fonte de 12,5px num campo
+                          `type="time"` é um alvo de toque abaixo do
+                          mínimo recomendado — e a fonte pequena ainda
+                          fazia o Safari dar zoom ao focar. Definir o
+                          horário do almoço no celular virava briga.
+                        */
+                        className="h-11 w-[104px] px-2 text-base sm:h-8 sm:text-[12.5px]"
                       />
                       <span className="text-onix-300">—</span>
                       <Entrada
                         type="time" value={dia.almocoFim ?? ''}
                         onChange={(e) => alterarDia(dia.diaSemana, { almocoFim: e.target.value || null })}
-                        className="h-8 w-[100px] px-2 text-[12.5px]"
+                        /*
+                          44px no celular, compacto a partir de `sm`.
+
+                          32px de altura com fonte de 12,5px num campo
+                          `type="time"` é um alvo de toque abaixo do
+                          mínimo recomendado — e a fonte pequena ainda
+                          fazia o Safari dar zoom ao focar. Definir o
+                          horário do almoço no celular virava briga.
+                        */
+                        className="h-11 w-[104px] px-2 text-base sm:h-8 sm:text-[12.5px]"
                       />
                     </div>
                   )}

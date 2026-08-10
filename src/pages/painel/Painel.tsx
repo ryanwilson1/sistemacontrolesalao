@@ -54,8 +54,24 @@ export default function Painel() {
         descricao="Este é o resumo do seu dia."
       />
 
-      {/* Indicadores por período */}
-      <section className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
+      {/*
+        Os próximos atendimentos vêm primeiro.
+
+        Os indicadores — receita, ocupação, cancelamentos — respondem
+        "como foi o mês". A pergunta das 8h da manhã, com cliente
+        esperando, é outra: **quem chega agora**. Ela estava embaixo de
+        quatro cartões de porcentagem, exigindo rolagem no celular
+        justamente no momento de maior pressa.
+
+        Números de acompanhamento continuam logo abaixo, onde servem
+        para consulta e não atrapalham o uso do dia.
+      */}
+      <section>
+        <ProximosAtendimentos itens={dados?.proximos ?? []} carregando={carregando} />
+      </section>
+
+      {/* Indicadores de acompanhamento */}
+      <section className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         {carregandoPainel || !painel ? (
           Array.from({ length: 4 }).map((_, i) => <EsqueletoCarta key={i} />)
         ) : (
@@ -92,8 +108,6 @@ export default function Painel() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.5fr_1fr]">
         <div className="space-y-4">
-          <ProximosAtendimentos itens={dados?.proximos ?? []} carregando={carregando} />
-
           {ehGestor && painel && (
             <div className="grid gap-4 sm:grid-cols-2">
               <CartaoDestaque
