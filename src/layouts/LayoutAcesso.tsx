@@ -1,3 +1,4 @@
+import { useSessao } from '@/contexts'
 import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { APP } from '@/constants'
@@ -10,6 +11,17 @@ import { FileteDeOuro, Monograma } from '@/components/common'
  * No celular ele some e vira só o monograma — a tela pequena não tem
  * espaço para ornamento.
  */
+/**
+ * O nome vem do studio cadastrado, não do código.
+ *
+ * Antes estava escrito "Emely Barbosa" direto aqui — o nome do salão da
+ * demonstração. Todo salão que instalasse o sistema veria o nome de
+ * outra pessoa na própria tela de login.
+ *
+ * Na tela de entrada ainda não há sessão, então o studio pode não ter
+ * carregado: o texto neutro cobre esse instante sem inventar nome
+ * nenhum.
+ */
 export function LayoutAcesso({
   titulo, subtitulo, children, rodape,
 }: {
@@ -18,6 +30,9 @@ export function LayoutAcesso({
   children: ReactNode
   rodape?: ReactNode
 }) {
+  const { studio } = useSessao()
+  const nomeDoStudio = studio?.nomeFantasia?.trim() || studio?.nome || 'System Studio'
+
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       <aside className="relative hidden overflow-hidden bg-quartzo lg:block">
@@ -43,7 +58,7 @@ export function LayoutAcesso({
               transition={{ duration: 0.5, delay: 0.08, ease: [0.2, 0.8, 0.2, 1] }}
               className="mt-6 font-display text-[15px] uppercase leading-relaxed tracking-[0.3em] text-onix-700"
             >
-              Emely Barbosa
+              {nomeDoStudio}
               <span className="mt-2 block text-[11px] tracking-[0.4em] text-onix-500">
                 Studio de beleza
               </span>
@@ -60,7 +75,7 @@ export function LayoutAcesso({
             <Monograma tamanho="lg" />
             <span>
               <span className="block font-display text-[12px] uppercase tracking-[0.18em] text-onix-800">
-                Emely Barbosa
+                {nomeDoStudio}
               </span>
               <span className="block text-[10px] uppercase tracking-[0.22em] text-onix-300">
                 Studio de beleza

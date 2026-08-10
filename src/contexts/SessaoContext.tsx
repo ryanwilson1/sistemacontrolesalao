@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ErroDeConfiguracao } from '@/utils/erros'
 import {
   aoMudarSessao, iniciarSistema, sessaoServico, studioRepo, tempoReal, type Sessao,
 } from '@/services'
@@ -16,6 +17,8 @@ import type { Studio } from '@/types'
  */
 
 interface ContextoSessao {
+  /** Sistema publicado sem credenciais do banco. */
+  erroDeConfiguracao: string | null
   carregando: boolean
   sessao: Sessao | null
   studio: Studio | null
@@ -35,6 +38,7 @@ const Contexto = createContext<ContextoSessao | null>(null)
 export function SessaoProvider({ children }: { children: ReactNode }) {
   const { aplicar, aplicarCorPropria } = useTema()
   const [carregando, setCarregando] = useState(true)
+  const [erroDeConfiguracao, setErroDeConfiguracao] = useState<string | null>(null)
   const [sessao, setSessao] = useState<Sessao | null>(null)
   const [studio, setStudio] = useState<Studio | null>(null)
 
@@ -71,7 +75,7 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
         const [sessaoAtual] = await Promise.all([sessaoServico.atual(), carregarStudio()])
         if (!ativo) return
         setSessao(sessaoAtual)
-      } catch {
+      } catch (falha) {
         /*
           Falhar aqui não pode travar a tela.
 
@@ -84,6 +88,21 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
           Sem sessão, as guardas mandam para a entrada; o portal público
           carrega os próprios dados pelas funções do banco.
         */
+        /*
+          Falta de configuração é caso à parte.
+
+          Os outros erros aqui são passageiros — banco fora do ar,
+          visitante sem sessão — e mandar para a tela de entrada é a
+          resposta certa. Já um sistema publicado sem as credenciais do
+          banco não melhora com o tempo nem com login: alguém precisa
+          cadastrar as variáveis e publicar de novo.
+
+          Sem esta distinção, a proprietária ficaria batendo na tela de
+          login com a senha certa, sem entender por que não entra.
+        */
+        if (falha instanceof ErroDeConfiguracao) {
+          if (ativo) setErroDeConfiguracao(falha.message)
+        }
         if (ativo) setSessao(null)
       } finally {
         if (ativo) setCarregando(false)
@@ -152,6 +171,7 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
 
   const valor = useMemo<ContextoSessao>(
     () => ({
+      erroDeConfiguracao,
       carregando,
       sessao,
       studio,
@@ -163,7 +183,7 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
       sair,
       recarregarStudio: carregarStudio,
     }),
-    [carregando, sessao, studio, entrar, entrarComConta, sair, carregarStudio],
+    [erroDeConfiguracao, carregando, sessao, studio, entrar, entrarComConta, sair, carregarStudio],
   )
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>
