@@ -36,8 +36,25 @@ function emDesenvolvimento(): boolean {
   }
 }
 
+/**
+ * Falta configuração para o sistema funcionar.
+ *
+ * Separado dos demais porque não é erro de uso nem falha passageira: é
+ * o sistema publicado sem as credenciais do banco. Ninguém resolve
+ * tentando de novo — alguém precisa cadastrar as variáveis e publicar
+ * outra vez. A tela trata este caso com instruções, não com "tente
+ * novamente".
+ */
+export class ErroDeConfiguracao extends Error {
+  constructor(mensagem: string) {
+    super(mensagem)
+    this.name = 'ErroDeConfiguracao'
+  }
+}
+
 /** Traduz qualquer falha para uma frase que a usuária entende. */
 export function mensagemDeErro(erro: unknown): string {
+  if (erro instanceof ErroDeConfiguracao) return erro.message
   if (erro instanceof ErroDeConflito) return erro.message
   if (erro instanceof ErroDeRegra) return erro.message
   if (erro instanceof Error) {
