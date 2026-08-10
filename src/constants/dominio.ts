@@ -96,3 +96,29 @@ export const DIAS_SEMANA = [
 ] as const
 
 export const UNIDADES = ['un', 'ml', 'L', 'g', 'kg', 'cx', 'pct'] as const
+
+/* ------------------------------------------------------------------ */
+/* Caixa                                                               */
+/* ------------------------------------------------------------------ */
+
+export const FORMAS_PAGAMENTO: FormaPagamento[] = [
+  'dinheiro', 'pix', 'debito', 'credito', 'transferencia', 'outro',
+]
+
+/**
+ * Quais formas de pagamento mexem no dinheiro da gaveta.
+ *
+ * Só dinheiro. Pix e cartão entram no faturamento e não passam pela
+ * gaveta — a maquininha e a conta recebem por fora.
+ *
+ * A distinção decide o fechamento do dia. Uma venda de R$ 150 paga com
+ * R$ 100 no Pix e R$ 50 em espécie faz o faturamento subir R$ 150 e a
+ * gaveta subir R$ 50. Somar tudo faria a proprietária procurar R$ 100
+ * que nunca estiveram ali — todo santo dia, no fim do expediente.
+ *
+ * Mora aqui, e não escondida dentro do repositório, porque é regra de
+ * negócio: precisa poder ser lida por quem for entendê-la e coberta
+ * por teste. Enquanto estava privada, nenhuma das duas coisas era
+ * possível.
+ */
+export const AFETA_GAVETA: FormaPagamento[] = ['dinheiro']
