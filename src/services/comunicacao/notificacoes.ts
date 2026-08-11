@@ -36,10 +36,23 @@ export async function apurar(): Promise<Candidata[]> {
   const hoje = new Date()
   const { de, ate } = faixaDoDia(hoje)
 
-  const [
-    pendentes, estoqueBaixo, vencendo, aniversariantes, caixa, configuracao, ultimoBackup,
-    solicitacoesAbertas, esperando,
-  ] = await Promise.all([
+  /*
+    Nove fontes, cada uma por sua conta.
+
+    Com `Promise.all`, uma única recusa derrubava as outras oito. Não é
+    hipótese: a conta de acesso restrito não lê `produtos` nem `caixas`
+    (10-acesso-agenda.sql), então **toda** apuração dela terminava em
+    erro. O sino nunca contava nada, e, como o Sino dispara isto sem
+    `catch`, a falha subia como rejeição não tratada a cada cinco
+    minutos — invisível para quem usa, ruidosa no console.
+
+    `allSettled` troca \"tudo ou nada\" por \"o que der\". Quem não puder
+    ler estoque continua sendo avisada do agendamento pendente e do
+    aniversário da cliente, que é o que ela pode resolver de qualquer
+    forma. Vale para além da permissão: uma tabela lenta ou uma consulta
+    que falhou não deveria calar o resto.
+  */
+  const resultados = await Promise.allSettled([
     agendamentosRepo.noPeriodo(de, ate),
     produtosRepo.abaixoDoMinimo(),
     produtosRepo.vencendoEm(30),
@@ -50,6 +63,22 @@ export async function apurar(): Promise<Candidata[]> {
     solicitacoesRepo.abertas(),
     listaEsperaRepo.aguardando(),
   ])
+
+  /** O valor quando deu certo; o padrão quando não deu. */
+  const ou = <T,>(indice: number, padrao: T): T => {
+    const r = resultados[indice]
+    return r?.status === 'fulfilled' ? (r.value as T) : padrao
+  }
+
+  const pendentes = ou(0, [] as Awaited<ReturnType<typeof agendamentosRepo.noPeriodo>>)
+  const estoqueBaixo = ou(1, [] as Awaited<ReturnType<typeof produtosRepo.abaixoDoMinimo>>)
+  const vencendo = ou(2, [] as Awaited<ReturnType<typeof produtosRepo.vencendoEm>>)
+  const aniversariantes = ou(3, [] as Awaited<ReturnType<typeof clientesRepo.aniversariantes>>)
+  const caixa = ou(4, null as Awaited<ReturnType<typeof caixaRepo.aberto>>)
+  const configuracao = ou<Awaited<ReturnType<typeof configuracaoBackupRepo.ler>> | null>(5, null)
+  const ultimoBackup = ou(6, null as Awaited<ReturnType<typeof backupsRepo.ultimo>>)
+  const solicitacoesAbertas = ou(7, [] as Awaited<ReturnType<typeof solicitacoesRepo.abertas>>)
+  const esperando = ou(8, [] as Awaited<ReturnType<typeof listaEsperaRepo.aguardando>>)
 
   const candidatas: Candidata[] = []
 
@@ -173,7 +202,7 @@ export async function apurar(): Promise<Candidata[]> {
       detalhe: 'Os dados ficam só neste aparelho. Sem backup, uma limpeza do navegador apaga tudo.',
       destino: ROTAS.backup,
     })
-  } else if (backupVencido(configuracao)) {
+  } else if (configuracao && backupVencido(configuracao)) {
     candidatas.push({
       tipo: 'alerta',
       titulo: 'Está na hora de um novo backup',

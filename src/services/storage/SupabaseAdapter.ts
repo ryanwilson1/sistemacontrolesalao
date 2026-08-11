@@ -3,6 +3,7 @@ import { ROTULO_COLECAO } from './tipos'
 import { supabase, temSupabase } from '../supabase/cliente'
 import { ErroDeConflito, ErroDeRegra } from '@/utils/erros'
 import { comAcompanhamento } from '../conexao'
+import { normalizarInstante } from './instantes'
 
 /**
  * Armazenamento no Supabase.
@@ -124,29 +125,10 @@ const chaveDe = (colecao: Colecao): string => CHAVE_PRIMARIA[colecao] ?? 'id'
  * `supabase/09-concorrencia.sql` — as duas precisam concordar, e é por
  * isso que a lista está escrita e não deduzida.
  */
-/*
-  Desligado.
-
-  A função `atualizar_com_versao` existe no banco, com a assinatura
-  correta e permissão de execução para `authenticated` — as três coisas
-  foram conferidas. Ainda assim, toda chamada pela API voltava 400, e a
-  proprietária não conseguia salvar serviço, produto nem cliente.
-
-  Diante de um sistema que ela precisa usar hoje, a escolha é simples:
-  gravação direta na tabela, que é o caminho que sempre funcionou.
-
-  O que se perde é a proteção contra duas pessoas editando o MESMO
-  campo do MESMO registro ao mesmo tempo. O que continua de pé:
-
-    · só as colunas alteradas são enviadas, então edições em campos
-      diferentes convivem sem se sobrescrever;
-    · o RLS continua barrando quem não é da equipe;
-    · a trilha de auditoria continua registrando quem mudou o quê.
-
-  Para religar quando a causa do 400 for encontrada, basta devolver as
-  coleções a esta lista. O resto do código continua no lugar.
-*/
-const VERSIONADAS = new Set<Colecao>([])
+const VERSIONADAS = new Set<Colecao>([
+  'clientes', 'agendamentos', 'servicos', 'profissionais',
+  'produtos', 'studio', 'lancamentos', 'cupons',
+])
 
 export class SupabaseAdapter implements AdaptadorDeArmazenamento {
   readonly nome = 'Supabase'
@@ -154,6 +136,9 @@ export class SupabaseAdapter implements AdaptadorDeArmazenamento {
 
   private espelho = new Map<Colecao, unknown[]>()
   private locais = new Map<Colecao, unknown[]>()
+
+  /** Leituras em andamento. Ver o comentário longo em `listar`. */
+  private emVoo = new Map<Colecao, Promise<unknown[]>>()
 
   /** Lê do disco na primeira vez; depois responde da memória. */
   private lerLocal<T>(colecao: Colecao): T[] {
@@ -207,12 +192,69 @@ export class SupabaseAdapter implements AdaptadorDeArmazenamento {
     const emMemoria = this.espelho.get(colecao)
     if (emMemoria) return [...(emMemoria as T[])]
 
-    const { data, error } = await supabase().from(TABELA[colecao]).select('*')
-    if (error) throw this.traduzirFalha(error, colecao)
+    /*
+      Uma requisição por coleção, mesmo com dez pedidos ao mesmo tempo.
 
-    const registros = (data ?? []).map((linha) => paraCamelo(linha)) as T[]
-    this.espelho.set(colecao, registros)
-    return [...registros]
+      O espelho só era preenchido **depois** do `await`, e a tela do
+      painel dispara dez consultas em paralelo — três delas leem
+      serviços, clientes e profissionais cada uma. Todas encontravam o
+      espelho vazio no mesmo instante e todas iam à rede: nove viagens
+      para trazer três tabelas.
+
+      Guardar a promessa em vez do resultado resolve na raiz. Quem
+      chegar enquanto a primeira ainda está no ar espera a mesma
+      resposta, e o espelho passa a ser preenchido uma vez só.
+    */
+    const emVoo = this.emVoo.get(colecao)
+    if (emVoo) return [...((await emVoo) as T[])]
+
+    const busca = this.buscarTudo(colecao)
+      .then((registros) => {
+        this.espelho.set(colecao, registros)
+        return registros
+      })
+      .finally(() => {
+        this.emVoo.delete(colecao)
+      })
+
+    this.emVoo.set(colecao, busca)
+    return [...((await busca) as T[])]
+  }
+
+  /**
+   * Lê a tabela inteira, em páginas.
+   *
+   * O `select('*')` sozinho parecia trazer tudo e não trazia: o
+   * PostgREST corta a resposta no limite do projeto — mil linhas, por
+   * padrão — e devolve o recorte **sem erro nenhum**. Numa agenda com
+   * dois anos de histórico isso não aparece como falha; aparece como
+   * atendimento antigo que sumiu do relatório e cliente que perdeu
+   * metade da ficha, sem nada no console para explicar.
+   *
+   * Pedir por faixas até a página vir incompleta é o que garante que
+   * "listar" signifique listar.
+   */
+  private async buscarTudo(colecao: Colecao): Promise<unknown[]> {
+    const TAMANHO = 1000
+    const tudo: unknown[] = []
+
+    for (let pagina = 0; ; pagina++) {
+      const inicio = pagina * TAMANHO
+
+      const { data, error } = await supabase()
+        .from(TABELA[colecao])
+        .select('*')
+        .range(inicio, inicio + TAMANHO - 1)
+
+      if (error) throw this.traduzirFalha(error, colecao)
+
+      const lote = data ?? []
+      for (const linha of lote) tudo.push(paraCamelo(linha))
+
+      if (lote.length < TAMANHO) break
+    }
+
+    return tudo
   }
 
   /**
@@ -424,8 +466,21 @@ export class SupabaseAdapter implements AdaptadorDeArmazenamento {
   }
 
   invalidar(colecao?: Colecao): void {
-    if (colecao) this.espelho.delete(colecao)
-    else this.espelho.clear()
+    /*
+      A leitura em andamento também é descartada.
+
+      Uma busca disparada antes da gravação traz o estado anterior, e
+      ela ainda vai gravar o espelho quando chegar. Sem soltar a
+      promessa aqui, o dado velho aterrissaria por cima do novo — e a
+      tela mostraria o agendamento que acabou de ser cancelado.
+    */
+    if (colecao) {
+      this.espelho.delete(colecao)
+      this.emVoo.delete(colecao)
+    } else {
+      this.espelho.clear()
+      this.emVoo.clear()
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -505,7 +560,16 @@ export class SupabaseAdapter implements AdaptadorDeArmazenamento {
 const paraCamelo = (linha: Record<string, unknown>): Record<string, unknown> => {
   const saida: Record<string, unknown> = {}
   for (const [chave, valor] of Object.entries(linha)) {
-    saida[chave.replace(/_([a-z])/g, (_, letra: string) => letra.toUpperCase())] = valor
+    /*
+      O valor passa por `normalizarInstante` na mesma volta.
+
+      É a fronteira do sistema: daqui para dentro, toda data é
+      `2026-08-11T14:00:00.000Z` e as comparações de texto espalhadas
+      pelos repositórios voltam a valer. Ver `instantes.ts` para o que
+      acontecia antes.
+    */
+    saida[chave.replace(/_([a-z])/g, (_, letra: string) => letra.toUpperCase())] =
+      normalizarInstante(valor)
   }
   return saida
 }

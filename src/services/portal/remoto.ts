@@ -118,9 +118,30 @@ export async function gradeRemota(
       visitanteId: 'outra-pessoa', situacao: 'ativa', agendamentoId: null,
     }))
 
+  /*
+    `paraOPortal` faltava aqui — e só aqui.
+
+    O caminho local (`agendamentosRepo.gradeDoDia`) sempre passou. Este,
+    que é o caminho de produção, não passava. O motor tem dois
+    comportamentos que dependem dessa bandeira, e o segundo é o que
+    importava:
+
+      · horários guardados para encaixe somem do link (o banco já os
+        devolve como ocupação, então este lado não mudou de resultado);
+
+      · **o teto diário passa a valer.**
+
+    O teto era a parte perdida. A proprietária ajusta "no máximo 8
+    atendimentos por dia" em Ajustes, o número é gravado, a tela mostra
+    ele salvo — e o link público seguia aceitando o nono, o décimo, o
+    décimo primeiro. O limite existia em todo lugar menos onde precisava
+    existir: no formulário que a cliente preenche sozinha, de madrugada,
+    sem ninguém para segurar.
+  */
   return gradeDeHorarios({
     data: dia, servico, profissionais, profissionalId, jornada,
     bloqueios, agendamentos, reservas, visitanteId, studio,
+    paraOPortal: true,
   })
 }
 
@@ -256,6 +277,16 @@ const normalizarStudio = (bruto: Studio): Studio => ({
   reservaMinutos:
     (bruto as unknown as Record<string, number>).reserva_minutos ??
     PORTAL.reservaMinutosPadrao,
+  /*
+    Zero quando o banco não devolve a coluna.
+
+    Um projeto que ainda não rodou o 03-portal.sql atualizado responde
+    sem `limite_diario`, e `undefined` viraria `NaN` na comparação do
+    motor — que é falsa, mas por acidente. Zero diz a mesma coisa de
+    propósito: sem teto.
+  */
+  limiteDiario:
+    (bruto as unknown as Record<string, number>).limite_diario ?? 0,
 })
 
 const normalizarServico = (bruto: Servico): Servico => ({

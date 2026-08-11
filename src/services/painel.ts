@@ -312,23 +312,47 @@ async function indicadoresDeProcedimento(
 
 /** Retorno médio das clientes, em dias. Consulta mais pesada, à parte. */
 export async function calcularRetornoMedio(): Promise<number | null> {
-  const clientes = await clientesRepo.listar()
-  const ativas = clientes.filter((c) => c.ativo).slice(0, 60)
+  /*
+    Uma leitura da agenda, não sessenta.
+
+    A versão anterior chamava `doCliente` dentro do laço, e `doCliente`
+    lê a coleção inteira de agendamentos para filtrar uma cliente. Com
+    sessenta clientes ativas, era a agenda inteira percorrida sessenta
+    vezes — e, no primeiro acesso depois de qualquer gravação, sessenta
+    idas ao banco para responder um único número do painel.
+
+    Agrupar de uma vez dá o mesmo resultado com uma leitura. Também
+    some o limite de sessenta, que existia só para o laço não ficar
+    insuportável: agora todas as clientes entram na conta, e o número
+    passa a valer para o salão inteiro.
+  */
+  const [clientes, agendamentos] = await Promise.all([
+    clientesRepo.listar(),
+    agendamentosRepo.listar(),
+  ])
+
+  const ativas = new Set(clientes.filter((c) => c.ativo).map((c) => c.id))
+
+  const porCliente = new Map<string, string[]>()
+  for (const a of agendamentos) {
+    if (a.situacao !== 'concluido') continue
+    if (!a.clienteId || !ativas.has(a.clienteId)) continue
+
+    const lista = porCliente.get(a.clienteId)
+    if (lista) lista.push(a.inicio)
+    else porCliente.set(a.clienteId, [a.inicio])
+  }
 
   const intervalos: number[] = []
 
-  for (const cliente of ativas) {
-    const agendamentos = await agendamentosRepo.doCliente(cliente.id)
-    const concluidos = agendamentos
-      .filter((a) => a.situacao === 'concluido')
-      .sort((a, b) => a.inicio.localeCompare(b.inicio))
+  for (const datas of porCliente.values()) {
+    if (datas.length < 2) continue
+    datas.sort()
 
-    if (concluidos.length < 2) continue
+    const primeiro = new Date(datas[0]!).getTime()
+    const ultimo = new Date(datas[datas.length - 1]!).getTime()
 
-    const primeiro = new Date(concluidos[0]!.inicio).getTime()
-    const ultimo = new Date(concluidos[concluidos.length - 1]!.inicio).getTime()
-
-    intervalos.push((ultimo - primeiro) / 86_400_000 / (concluidos.length - 1))
+    intervalos.push((ultimo - primeiro) / 86_400_000 / (datas.length - 1))
   }
 
   if (intervalos.length === 0) return null

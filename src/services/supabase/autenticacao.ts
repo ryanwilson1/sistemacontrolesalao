@@ -102,6 +102,102 @@ export async function pessoaAtual(): Promise<PessoaAutenticada | null> {
   return data.user ? converter(data.user) : null
 }
 
+/**
+ * A conta da equipe, lida de `contas_equipe`.
+ *
+ * ---------------------------------------------------------------
+ * Por que esta função precisou existir
+ * ---------------------------------------------------------------
+ * O sistema tinha DUAS respostas para \"quem é esta pessoa\", e elas
+ * nunca se falavam:
+ *
+ *   o BANCO perguntava a `contas_equipe` — é o que `papel_da_conta()`
+ *   lê, e é o que decide quais linhas o Postgres entrega;
+ *
+ *   a TELA perguntava a `user_metadata.profissional_id` — um campo que
+ *   **nenhum código deste projeto grava**. `cadastrar()` está desligado
+ *   e `autorizar_conta` escreve em `contas_equipe`, não nos metadados.
+ *
+ * O resultado era silencioso e perfeitamente invertido. Rodar o comando
+ * que o próprio LEIA-ME manda rodar —
+ *
+ *   select autorizar_conta('carol@gmail.com', 'profissional', 'id-da-carol');
+ *
+ * — deixava a conta correta no banco e mandava a tela cair no
+ * `?? 'proprietaria'`. A Carol entrava vendo Financeiro, Relatórios,
+ * Backup e Ajustes. O menu inteiro, para quem foi cadastrada como
+ * profissional.
+ *
+ * Para o acesso restrito isso seria fatal: a Samara entraria como
+ * proprietária, a guarda de rota nunca dispararia, e o único freio
+ * restante seria o RLS — que recusa os dados mas não fecha as telas.
+ * Ela veria o sistema inteiro dando erro de permissão em cada clique, o
+ * que parece defeito e não parece restrição.
+ *
+ * Uma fonte só resolve. `contas_equipe` é a candidata natural: já é a
+ * autoridade do lado do banco, e a política \"ver a propria conta\"
+ * (02-seguranca.sql) existe exatamente para a pessoa poder ler a
+ * própria linha. Tela e Postgres passam a responder juntos porque
+ * passam a ler o mesmo lugar.
+ */
+export interface ContaDaEquipe {
+  profissionalId: string | null
+  papel: string
+  ativo: boolean
+}
+
+/**
+ * O resultado da consulta, com a distinção que importa.
+ *
+ * `ausente` e `indisponivel` pareciam a mesma coisa — as duas devolviam
+ * nulo — e não são:
+ *
+ *   **ausente**      o banco respondeu, e não há linha para esta conta.
+ *                    A pessoa existe em `auth.users` e ninguém a
+ *                    autorizou. O RLS vai recusar tudo.
+ *
+ *   **indisponivel** não deu para perguntar: tabela ainda não criada
+ *                    (projeto sem o 02-seguranca.sql), rede fora.
+ *                    Nada se pode concluir sobre quem é a pessoa.
+ *
+ * Tratá-las igual criava o pior desfecho possível: quem não estava
+ * autorizado recebia o papel de proprietária por omissão, via o menu
+ * completo — Financeiro, Backup, Ajustes — e cada clique dava erro de
+ * permissão. Parece sistema quebrado, e é conta não cadastrada.
+ */
+export type ResultadoDaConta =
+  | { situacao: 'autorizada'; conta: ContaDaEquipe }
+  | { situacao: 'ausente' }
+  | { situacao: 'indisponivel' }
+
+export async function contaDaEquipe(): Promise<ResultadoDaConta> {
+  if (!temSupabase()) return { situacao: 'indisponivel' }
+
+  const { data, error } = await supabase()
+    .from('contas_equipe')
+    .select('profissional_id, papel, ativo')
+    .maybeSingle()
+
+  /*
+    Erro aqui não derruba a entrada.
+
+    Um projeto que ainda não rodou o 02-seguranca.sql não tem a tabela,
+    e recusar o login por causa disso trancaria a proprietária para fora
+    do próprio sistema. Neste caso o sistema segue pelo caminho antigo.
+  */
+  if (error) return { situacao: 'indisponivel' }
+  if (!data) return { situacao: 'ausente' }
+
+  return {
+    situacao: 'autorizada',
+    conta: {
+      profissionalId: (data.profissional_id as string | null) ?? null,
+      papel: String(data.papel ?? ''),
+      ativo: data.ativo !== false,
+    },
+  }
+}
+
 export async function recuperarSenha(email: string): Promise<void> {
   const { error } = await supabase().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
     redirectTo: `${window.location.origin}${ROTAS.novaSenha}`,
