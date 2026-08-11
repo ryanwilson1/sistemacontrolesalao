@@ -86,6 +86,19 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
         const [sessaoAtual] = await Promise.all([sessaoServico.atual(), carregarStudio()])
         if (!ativo) return
         setSessao(sessaoAtual)
+
+        /*
+          Cinto e suspensório para o tempo real.
+
+          `INITIAL_SESSION` já cobre a abertura com sessão guardada, mas
+          depender de um único evento para algo que falha em silêncio é
+          arriscado: se ele não vier, a agenda para de se atualizar
+          sozinha e nada indica o motivo.
+
+          `iniciar()` é idempotente — sai cedo se o canal existe —,
+          então chamar aqui não cria um segundo canal.
+        */
+        if (sessaoAtual) tempoReal.iniciar()
       } catch (falha) {
         /*
           Falhar aqui não pode travar a tela.
