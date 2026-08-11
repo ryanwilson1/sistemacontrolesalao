@@ -22,8 +22,30 @@ import type { AgendamentoDetalhado } from '@/types'
 /** Instante a partir do qual um agendamento conta como "novo". */
 let marcaDagua = Date.now()
 
-/** Já anunciados nesta sessão. Impede o mesmo aviso duas vezes. */
+/**
+ * Já anunciados nesta sessão. Impede o mesmo aviso duas vezes.
+ *
+ * O teto existe porque este conjunto só crescia. Num sábado movimentado
+ * com o aplicativo aberto o dia todo, ele acumulava um identificador
+ * por agendamento vindo do link — para sempre, já que nada o esvaziava.
+ *
+ * Sozinho não derrubaria nada; o custo real era ele ser varrido a cada
+ * verificação junto com a agenda inteira. Duzentos cobre um dia com
+ * folga, e o mais antigo sai quando estoura: reanunciar um agendamento
+ * de horas atrás não acontece, porque a marca d'água já o deixou para
+ * trás.
+ */
 const jaAnunciados = new Set<string>()
+const TETO_ANUNCIADOS = 200
+
+function lembrarAnunciado(id: string): void {
+  jaAnunciados.add(id)
+  if (jaAnunciados.size <= TETO_ANUNCIADOS) return
+
+  // `Set` preserva a ordem de inserção: o primeiro é o mais antigo.
+  const maisAntigo = jaAnunciados.values().next().value
+  if (maisAntigo !== undefined) jaAnunciados.delete(maisAntigo)
+}
 
 /**
  * O que chegou pelo portal desde a última verificação.
@@ -44,7 +66,7 @@ export async function chegadasRecentes(): Promise<AgendamentoDetalhado[]> {
 
   if (novos.length === 0) return []
 
-  for (const agendamento of novos) jaAnunciados.add(agendamento.id)
+  for (const agendamento of novos) lembrarAnunciado(agendamento.id)
   marcaDagua = Date.now()
 
   const detalhados = await agendamentosRepo.detalhar(novos)
