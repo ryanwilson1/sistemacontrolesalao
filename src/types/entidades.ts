@@ -27,7 +27,22 @@ export interface Registro {
   versao?: number
 }
 
-export type Papel = 'proprietaria' | 'gerente' | 'profissional' | 'recepcao'
+export type Papel =
+  | 'proprietaria' | 'gerente' | 'profissional' | 'recepcao'
+  /**
+   * Acesso restrito à agenda.
+   *
+   * Não é um cargo — é um nível de acesso, e por isso destoa dos
+   * outros quatro. Existe para a profissional parceira que precisa
+   * enxergar e marcar horários sem alcançar dinheiro, estoque ou o
+   * cadastro do salão.
+   *
+   * Fica no mesmo campo que os cargos porque é o campo que as telas já
+   * consultam para decidir o que aparece. Separar em duas colunas
+   * criaria a combinação impossível — "gerente com acesso só à
+   * agenda" — e alguém acabaria por marcá-la.
+   */
+  | 'agenda'
 
 export type SituacaoAgendamento =
   | 'pendente' | 'confirmado' | 'em_atendimento' | 'concluido' | 'cancelado' | 'faltou'

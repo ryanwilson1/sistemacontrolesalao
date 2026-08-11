@@ -16,6 +16,14 @@ type Ouvinte = () => void
 const valores = new Map<string, unknown>()
 const ouvintes = new Map<string, Set<Ouvinte>>()
 
+/**
+ * Buscas em andamento, por chave.
+ *
+ * Mora aqui, e não em `useConsulta`, porque `invalidar` precisa
+ * alcançá-las. Ver o comentário longo dentro de `invalidar`.
+ */
+const emAndamento = new Map<string, Promise<unknown>>()
+
 export const cache = {
   ler<T>(chave: string): T | undefined {
     return valores.get(chave) as T | undefined
@@ -24,6 +32,22 @@ export const cache = {
   gravar<T>(chave: string, valor: T): void {
     valores.set(chave, valor)
     ouvintes.get(chave)?.forEach((avisar) => avisar())
+  },
+
+  /** A busca em voo desta chave, se houver. Usada por `useConsulta`. */
+  emVoo<T>(chave: string): Promise<T> | undefined {
+    return emAndamento.get(chave) as Promise<T> | undefined
+  },
+
+  /** Registra a busca e a solta sozinha ao terminar. */
+  registrarBusca<T>(chave: string, busca: Promise<T>): Promise<T> {
+    const acompanhada = busca.finally(() => {
+      // Só remove se ainda for esta. Uma invalidação no meio do caminho
+      // já pode ter posto outra no lugar.
+      if (emAndamento.get(chave) === acompanhada) emAndamento.delete(chave)
+    })
+    emAndamento.set(chave, acompanhada)
+    return acompanhada
   },
 
   inscrever(chave: string, ouvinte: Ouvinte): () => void {
@@ -42,6 +66,33 @@ export const cache = {
    * `invalidar('clientes')` atinge 'clientes:lista' e 'clientes:42'.
    */
   invalidar(...prefixos: string[]): void {
+    /*
+      A busca em voo também é descartada.
+
+      Sem esta parte, a deduplicação de requisições virava um problema
+      no pior momento possível. A sequência:
+
+        a grade do portal começa a carregar
+        ↓
+        outra cliente fecha o horário das 15h
+        ↓
+        invalidar('horarios') — e o refetch encontra a busca ANTIGA
+        ainda em voo e se pendura nela
+
+      O resultado é a grade sendo repovoada com o estado de antes: as
+      15h continuam na tela, a cliente toca de novo e leva o mesmo
+      erro. Exatamente o que o link não pode fazer.
+
+      Soltar a promessa aqui garante que uma invalidação sempre leve a
+      uma leitura nova. Quem já estava esperando a antiga recebe o dado
+      velho uma vez — e é acordado logo em seguida pelo aviso abaixo.
+    */
+    for (const chave of [...emAndamento.keys()]) {
+      if (prefixos.some((prefixo) => chave.startsWith(prefixo))) {
+        emAndamento.delete(chave)
+      }
+    }
+
     // Varre valores E ouvintes: uma chave guardada sem ninguém escutando
     // também precisa ser descartada, senão volta obsoleta na próxima tela.
     const chaves = new Set([...valores.keys(), ...ouvintes.keys()])
@@ -56,6 +107,7 @@ export const cache = {
 
   limpar(): void {
     valores.clear()
+    emAndamento.clear()
     ouvintes.forEach((conjunto) => conjunto.forEach((avisar) => avisar()))
   },
 }

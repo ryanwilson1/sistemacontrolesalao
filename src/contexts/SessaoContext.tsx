@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ErroDeConfiguracao } from '@/utils/erros'
 import {
-  aoMudarSessao, iniciarSistema, sessaoServico, studioRepo, tempoReal, type Sessao,
+  aoMudarSessao, armazenamento, iniciarSistema, sessaoServico, studioRepo,
+  tempoReal, type Sessao,
 } from '@/services'
-import { PAPEIS_GESTORES } from '@/constants'
+import { cache } from '@/hooks/dados/cache'
+import { ehSoAgenda, PAPEIS_GESTORES } from '@/constants'
 import { useTema } from './TemaContext'
 import type { Studio } from '@/types'
 
@@ -24,6 +26,15 @@ interface ContextoSessao {
   studio: Studio | null
   nome: string
   ehGestor: boolean
+  /**
+   * Acesso restrito à agenda.
+   *
+   * Fica ao lado de `ehGestor` porque responde à mesma pergunta pelo
+   * outro lado: `ehGestor` abre telas, este fecha. As guardas de rota e
+   * o menu leem daqui, e nenhuma tela precisa saber que existe um papel
+   * chamado 'agenda'.
+   */
+  soAgenda: boolean
   entrar: (profissionalId: string) => Promise<void>
   /** Só existe com banco: entra com e-mail e senha. */
   entrarComConta: (email: string, senha: string) => Promise<void>
@@ -146,6 +157,36 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
       else tempoReal.encerrar()
 
       if (!dentro) {
+        /*
+          Sair apaga o que ficou na memória. Não é zelo: é o furo.
+
+          O sistema é uma página só — sair não recarrega nada. O espelho
+          do armazenamento e o cache de consultas são `Map` de módulo, e
+          continuavam de pé, cheios, depois do logout.
+
+          O computador do salão é compartilhado. A sequência real é
+          esta:
+
+            a proprietária entra, abre Financeiro, Caixa e Clientes
+            (o espelho enche com lançamentos, caixas e a lista inteira)
+            ↓
+            ela sai
+            ↓
+            a Samara entra na mesma aba
+
+          A partir daí, cada `listar()` respondia do espelho — **sem ir
+          ao banco**. O RLS não é consultado quando ninguém pergunta
+          nada. Toda a restrição do 10-acesso-agenda.sql passava ao
+          largo, porque o dado já estava no navegador antes de ela
+          chegar.
+
+          Vale para qualquer troca de pessoa, não só para o acesso
+          restrito: os números do dia anterior de outra conta apareciam
+          como se fossem os desta.
+        */
+        cache.limpar()
+        armazenamento.invalidar?.()
+
         setSessao(null)
         return
       }
@@ -177,6 +218,7 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
       studio,
       nome: sessao?.nome ?? '',
       ehGestor: sessao ? PAPEIS_GESTORES.includes(sessao.papel) : false,
+      soAgenda: sessao ? ehSoAgenda(sessao.papel) : false,
       entrar,
       entrarComConta,
       exigeSenha: sessaoServico.exigeSenha,

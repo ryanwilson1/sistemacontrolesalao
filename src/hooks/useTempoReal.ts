@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { armazenamento } from '@/services/storage'
+import { armazenamento, type Colecao } from '@/services/storage'
 import { tempoReal, IDENTIDADE_DESTA_ABA } from '@/services/tempo-real'
 import { cache, CHAVES_POR_COLECAO } from './dados/cache'
 import type { EventoTempoReal } from '@/services/tempo-real'
@@ -29,7 +29,7 @@ const JANELA_MS = 60
 export function useTempoReal(): void {
   useEffect(() => {
     let pendentes = new Set<string>()
-    let remotoNoLote = false
+    let colecoesRemotas = new Set<Colecao>()
     let agendado: number | null = null
 
     const despejar = () => {
@@ -38,8 +38,26 @@ export function useTempoReal(): void {
       const chaves = [...pendentes]
       pendentes = new Set()
 
-      if (remotoNoLote) armazenamento.invalidar?.()
-      remotoNoLote = false
+      /*
+        Descarta o espelho **das coleções que mudaram**, não de todas.
+
+        `invalidar()` sem argumento limpa o espelho inteiro, e era isso
+        que acontecia a cada aviso. O efeito era desproporcional:
+        confirmar um agendamento derrubava a cópia de clientes,
+        serviços, produtos, lançamentos e mais meia dúzia de tabelas
+        que ninguém tinha tocado — e a próxima renderização baixava
+        todas de novo, uma por uma.
+
+        Num computador com fibra isso é um piscar. No celular da
+        proprietária, em rede de loja, é a tela congelada por segundos
+        depois de cada clique. Era a causa da lentidão que ela
+        descreveu.
+
+        O evento sempre soube qual coleção mudou; o que faltava era
+        usar essa informação.
+      */
+      for (const colecao of colecoesRemotas) armazenamento.invalidar?.(colecao)
+      colecoesRemotas = new Set()
 
       if (chaves.length > 0) cache.invalidar(...chaves)
     }
@@ -49,7 +67,7 @@ export function useTempoReal(): void {
       if (!chaves) return
 
       for (const chave of chaves) pendentes.add(chave)
-      if (evento.origem !== IDENTIDADE_DESTA_ABA) remotoNoLote = true
+      if (evento.origem !== IDENTIDADE_DESTA_ABA) colecoesRemotas.add(evento.colecao)
 
       agendado ??= window.setTimeout(despejar, JANELA_MS)
     }
@@ -72,6 +90,16 @@ export function useTempoReal(): void {
  */
 export function useRelogio(tarefa: () => void, intervaloMs: number): void {
   useEffect(() => {
+    /*
+      Intervalo zero (ou negativo) desliga.
+
+      Existe para quem precisa decidir *se* vai varrer depois de já ter
+      chamado o hook — o que as regras dos hooks impõem. Sem esta saída,
+      a alternativa era um `if` em volta da chamada, que o React proíbe,
+      ou uma tarefa vazia, que continua acordando o navegador à toa.
+    */
+    if (intervaloMs <= 0) return
+
     let relogio: number | null = null
 
     const parar = () => {

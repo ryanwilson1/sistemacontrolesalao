@@ -21,10 +21,12 @@ const LARGURA_MENU = 268
 export function LayoutApp() {
   const [menuAberto, setMenuAberto] = useState(false)
   const { pathname } = useLocation()
-  const { ehGestor } = useSessao()
+  const { ehGestor, soAgenda } = useSessao()
 
-  const itens = menuVisivel(ehGestor)
-  const contadores = useContadoresDoMenu(ehGestor)
+  const itens = menuVisivel(ehGestor, soAgenda)
+  // Os contadores leem pedidos e lista de espera — telas que o acesso
+  // restrito não abre. Pedi-los seria erro de permissão a cada minuto.
+  const contadores = useContadoresDoMenu(ehGestor && !soAgenda)
   const itensCelular = itens.filter((item) => item.destaque).slice(0, 4)
   const tituloAtual = itens.find((item) => item.para === pathname)?.rotulo ?? ''
 

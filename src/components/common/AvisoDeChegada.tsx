@@ -43,7 +43,20 @@ export function AvisoDeChegada() {
     })
   }, [])
 
-  useRelogio(verificar, RITMO_MS)
+  /*
+    O relógio só corre para quem vê o aviso.
+
+    A varredura ficava acima do `if (!ehGestor) return null`, e as
+    regras dos hooks obrigam a chamada a acontecer sempre — mas obrigam
+    a *chamar*, não a *trabalhar*. O resultado era uma leitura da agenda
+    inteira a cada oito segundos no aparelho de toda a equipe, para
+    alimentar um cartão que aquela pessoa nunca veria.
+
+    No celular, oito segundos é ininterrupto: a bateria some e a tela
+    engasga em cada ciclo. Passar `0` desliga o relógio sem quebrar a
+    ordem dos hooks.
+  */
+  useRelogio(verificar, ehGestor ? RITMO_MS : 0)
 
   if (!ehGestor) return null
 

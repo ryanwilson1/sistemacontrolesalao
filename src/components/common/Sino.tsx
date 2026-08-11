@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, Bell, Check, CheckCheck, Info, XCircle, type LucideIcon } from 'lucide-react'
 import { useMarcarLida, useMarcarTodasLidas, useNaoLidas, useNotificacoes, useSincronizarNotificacoes } from '@/hooks'
+import { useSessao } from '@/contexts'
 import { tempoRelativo } from '@/utils/datas'
 import { cn } from '@/utils/cn'
 import type { TipoNotificacao } from '@/types'
@@ -27,17 +28,34 @@ export function Sino() {
 
   const { dados: notificacoes } = useNotificacoes()
   const { dados: naoLidas } = useNaoLidas()
+  const { soAgenda } = useSessao()
   const sincronizar = useSincronizarNotificacoes()
   const marcarLida = useMarcarLida()
   const marcarTodas = useMarcarTodasLidas()
 
-  // Recalcula ao abrir o sistema e de tempos em tempos.
+  /*
+    Recalcula ao abrir o sistema e de tempos em tempos.
+
+    O `catch` não é zelo excessivo: `void promessa` sem tratamento vira
+    rejeição não tratada, e este intervalo dispara sozinho para sempre.
+    Uma fonte fora do ar transformava o sino num alarme silencioso que
+    só o console ouvia.
+  */
   useEffect(() => {
-    void sincronizar.executar(undefined)
-    const relogio = setInterval(() => void sincronizar.executar(undefined), 300_000)
+    if (soAgenda) return
+
+    const apurar = () => {
+      void sincronizar.executar(undefined).catch(() => {
+        // Notificação é conveniência. Falhar aqui não interrompe nada
+        // do que a pessoa veio fazer, e avisar sobre o aviso seria pior.
+      })
+    }
+
+    apurar()
+    const relogio = setInterval(apurar, 300_000)
     return () => clearInterval(relogio)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [soAgenda])
 
   // Clique fora fecha.
   useEffect(() => {
@@ -52,6 +70,16 @@ export function Sino() {
   }, [aberto])
 
   const total = naoLidas ?? 0
+
+  /*
+    Sem sino no acesso restrito.
+
+    Tudo o que ele anuncia — estoque no mínimo, caixa aberto, backup
+    atrasado — mora atrás de uma porta que ela não abre. Um sino que
+    nunca toca é ruído visual; um que tocasse levaria a um erro de
+    permissão, que é pior.
+  */
+  if (soAgenda) return null
 
   return (
     <div ref={caixa} className="relative">

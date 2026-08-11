@@ -37,7 +37,23 @@ export function useConsulta<T>(
     setErro(null)
 
     try {
-      const resultado = await buscarRef.current()
+      /*
+        Uma busca por chave, ainda que várias telas peçam a mesma.
+
+        Uma invalidação acorda todos os inscritos ao mesmo tempo, e cada
+        um chamava a própria busca. Quatro cartões do painel lendo o
+        mesmo resumo viravam quatro leituras completas do banco para
+        montar um número idêntico quatro vezes.
+
+        O registro mora no `cache` — e não num `Map` local deste
+        arquivo — porque `cache.invalidar` precisa poder soltá-lo. Uma
+        busca iniciada antes da invalidação carrega o estado anterior;
+        se ela continuasse valendo para quem chega depois, a grade do
+        portal seria repovoada com o horário que acabou de ser ocupado.
+      */
+      const resultado = await (cache.emVoo<T>(chave) ??
+        cache.registrarBusca(chave, buscarRef.current()))
+
       cache.gravar(chave, resultado)
       setDados(resultado)
     } catch (falha) {

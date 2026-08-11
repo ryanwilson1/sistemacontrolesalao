@@ -40,6 +40,16 @@ export const MENU: ItemMenu[] = [
   { para: ROTAS.configuracoes, rotulo: 'Ajustes',    icone: Settings,  soGestor: true },
 ]
 
-/** Filtra pelo papel e devolve só o que a pessoa pode acessar. */
-export const menuVisivel = (ehGestor: boolean): ItemMenu[] =>
-  MENU.filter((item) => !item.soGestor || ehGestor)
+/**
+ * Filtra pelo papel e devolve só o que a pessoa pode acessar.
+ *
+ * `soAgenda` corta antes de qualquer outra coisa, e devolve um item só.
+ * Filtrar por `item.para === ROTAS.agenda` em vez de listar exceções
+ * significa que a tela nova de amanhã **não** aparece para ela por
+ * esquecimento — a regra é \"nada além da agenda\", não \"tudo menos
+ * estas quinze\".
+ */
+export const menuVisivel = (ehGestor: boolean, soAgenda = false): ItemMenu[] => {
+  if (soAgenda) return MENU.filter((item) => item.para === ROTAS.agenda)
+  return MENU.filter((item) => !item.soGestor || ehGestor)
+}

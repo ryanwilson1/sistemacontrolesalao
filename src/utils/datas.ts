@@ -1,12 +1,33 @@
 import {
   addDays, addMinutes, differenceInMinutes, eachDayOfInterval, endOfMonth, endOfWeek,
-  format, isSameDay, isToday, isTomorrow, parseISO, startOfDay, startOfMonth, startOfWeek,
+  format as formatarBruto, isSameDay, isToday, isTomorrow, parseISO, startOfDay,
+  startOfMonth, startOfWeek,
 } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 /** Datas em português, com nomes que dizem o que fazem. */
 
 const L = { locale: ptBR }
+
+/**
+ * `format` com português embutido.
+ *
+ * O `format` do date-fns cai no inglês quando ninguém passa o idioma, e
+ * o padrão silencioso é o problema: `format(data, 'EEEE')` compila,
+ * roda, não avisa nada — e escreve "Monday" na agenda de um salão
+ * brasileiro. Foi exatamente o que aconteceu na visão de semana e na
+ * tira de dias do celular.
+ *
+ * Reexportar este envoltório em vez do original faz o esquecimento
+ * deixar de existir: quem importar `format` daqui recebe português sem
+ * pedir. Quem realmente precisar de outro idioma passa o terceiro
+ * argumento e sobrescreve.
+ */
+export const format = (
+  data: Date | number,
+  padrao: string,
+  opcoes?: Parameters<typeof formatarBruto>[2],
+) => formatarBruto(data, padrao, { ...L, ...opcoes })
 
 export const dt = (v: string | Date): Date => (typeof v === 'string' ? parseISO(v) : v)
 
@@ -18,6 +39,15 @@ export const hora = (v: string | Date) => format(dt(v), 'HH:mm')
 export const mesPorExtenso = (v: string | Date) => format(dt(v), 'MMMM', L)
 export const mesAno = (v: string | Date) => format(dt(v), "MMMM 'de' yyyy", L)
 export const isoData = (v: Date) => format(v, 'yyyy-MM-dd')
+
+/* ---------- Dias da semana ----------
+   Existem com nome próprio para ninguém precisar lembrar que 'EEEE' é
+   por extenso e 'EEEEEE' é a abreviação de duas letras. Um padrão
+   digitado errado não quebra: escreve outra coisa, e ninguém confere. */
+export const diaDaSemana = (v: string | Date) => format(dt(v), 'EEEE', L)
+export const diaDaSemanaCurto = (v: string | Date) => format(dt(v), 'EEE', L)
+export const diaDaSemanaMini = (v: string | Date) => format(dt(v), 'EEEEEE', L)
+export const diaEMes = (v: string | Date) => format(dt(v), 'd MMM', L)
 
 /** "Hoje", "Amanhã" ou a data por extenso. */
 export function dataRelativa(v: string | Date): string {
@@ -82,6 +112,6 @@ export function comHora(data: Date, horaTexto: string): Date {
 }
 
 export {
-  addDays, addMinutes, differenceInMinutes, endOfMonth, format,
+  addDays, addMinutes, differenceInMinutes, endOfMonth,
   isSameDay, isToday, startOfDay, startOfMonth,
 }

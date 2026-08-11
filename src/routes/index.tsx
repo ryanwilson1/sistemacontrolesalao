@@ -6,7 +6,7 @@ import { Outlet } from 'react-router-dom'
 import { LayoutApp } from '@/layouts'
 import { CarregandoTela } from '@/components/feedback'
 import { useTempoReal } from '@/hooks/useTempoReal'
-import { Protegida, SomenteGestor, SomenteVisitante } from './guardas'
+import { ExigeAcessoCompleto, Protegida, SomenteGestor, SomenteVisitante } from './guardas'
 
 /**
  * Raiz de todas as rotas.
@@ -81,22 +81,41 @@ const rotas = createRoutesFromElements(
 
         {/* Painel */}
         <Route element={<Protegida><LayoutApp /></Protegida>}>
-          <Route index element={<Painel />} />
+          {/*
+            A agenda fica fora da guarda seguinte de propósito: é a
+            única tela que o acesso restrito enxerga, e é para cá que
+            ele é mandado quando tenta qualquer outra.
+          */}
           <Route path="agenda" element={<Agenda />} />
-          <Route path="clientes" element={<Clientes />} />
-          <Route path="clientes/:id" element={<FichaCliente />} />
-          <Route path="servicos" element={<Servicos />} />
-          <Route path="estoque" element={<Estoque />} />
-          <Route path="financeiro" element={<SomenteGestor><Financeiro /></SomenteGestor>} />
-          <Route path="caixa" element={<Caixa />} />
-          <Route path="cupons" element={<SomenteGestor><Cupons /></SomenteGestor>} />
-          <Route path="fidelidade" element={<SomenteGestor><Fidelidade /></SomenteGestor>} />
-          <Route path="relatorios" element={<SomenteGestor><Relatorios /></SomenteGestor>} />
-          <Route path="configuracoes" element={<SomenteGestor><Configuracoes /></SomenteGestor>} />
-          <Route path="backup" element={<SomenteGestor><Backup /></SomenteGestor>} />
-          <Route path="lembretes" element={<Lembretes />} />
-          <Route path="portal" element={<SomenteGestor><Portal /></SomenteGestor>} />
-          <Route path="assistente" element={<Assistente />} />
+
+          {/*
+            Tudo o mais exige acesso completo.
+
+            Agrupado numa rota-mãe em vez de repetir a guarda em quinze
+            linhas. A diferença não é de estilo: com a guarda repetida,
+            a tela nova que alguém acrescentar amanhã nasce **aberta**,
+            e ninguém percebe até a pessoa errada abri-la. Aqui ela
+            nasce fechada, que é o padrão certo para uma decisão de
+            acesso.
+          */}
+          <Route element={<ExigeAcessoCompleto><Outlet /></ExigeAcessoCompleto>}>
+            <Route index element={<Painel />} />
+            <Route path="clientes" element={<Clientes />} />
+            <Route path="clientes/:id" element={<FichaCliente />} />
+            <Route path="servicos" element={<Servicos />} />
+            <Route path="estoque" element={<Estoque />} />
+            <Route path="financeiro" element={<SomenteGestor><Financeiro /></SomenteGestor>} />
+            <Route path="caixa" element={<Caixa />} />
+            <Route path="cupons" element={<SomenteGestor><Cupons /></SomenteGestor>} />
+            <Route path="fidelidade" element={<SomenteGestor><Fidelidade /></SomenteGestor>} />
+            <Route path="relatorios" element={<SomenteGestor><Relatorios /></SomenteGestor>} />
+            <Route path="configuracoes" element={<SomenteGestor><Configuracoes /></SomenteGestor>} />
+            <Route path="backup" element={<SomenteGestor><Backup /></SomenteGestor>} />
+            <Route path="lembretes" element={<Lembretes />} />
+            <Route path="portal" element={<SomenteGestor><Portal /></SomenteGestor>} />
+            <Route path="assistente" element={<Assistente />} />
+          </Route>
+
           <Route path="*" element={<NaoEncontrada />} />
         </Route>
 

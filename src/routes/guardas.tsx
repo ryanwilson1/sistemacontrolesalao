@@ -21,7 +21,63 @@ export function Protegida({ children }: { children: ReactNode }) {
   if (erroDeConfiguracao) return <TelaDeConfiguracao motivo={erroDeConfiguracao} />
   if (!sessao) return <Navigate to={ROTAS.entrar} replace />
 
+  /*
+    Entrou, mas não está na lista da casa.
+
+    Acontece na janela entre criar a conta no Supabase e rodar
+    `autorizar_conta` / `conceder_acesso_agenda` — e também depois de
+    `revogar_conta`, que desativa sem apagar.
+
+    Antes desta tela, o desfecho era o pior possível: sem linha em
+    `contas_equipe`, a sessão caía no papel de proprietária por omissão
+    e a pessoa via o menu completo — Financeiro, Backup, Ajustes — com
+    cada clique devolvendo erro de permissão. Parece sistema quebrado, e
+    é só cadastro que falta.
+  */
+  if (!sessao.autorizada) return <TelaSemAutorizacao />
+
   return <>{children}</>
+}
+
+/** Conta criada, acesso ainda não concedido. */
+function TelaSemAutorizacao() {
+  const { sair } = useSessao()
+
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-quartzo-50 p-6">
+      <div className="w-full max-w-md rounded-2xl border border-onix-100 bg-white p-6 shadow-carta">
+        <h1 className="font-display text-xl font-medium tracking-wide text-onix-900">
+          Acesso ainda não liberado
+        </h1>
+
+        <p className="mt-2 text-[14px] leading-relaxed text-onix-500">
+          Sua conta existe, mas ainda não foi autorizada a usar o sistema.
+          Peça para quem administra o studio liberar o seu acesso.
+        </p>
+
+        <div className="mt-5 rounded-xl bg-quartzo-50 p-4">
+          <p className="text-[13px] font-medium text-onix-700">
+            Para quem administra:
+          </p>
+          <p className="mt-2 text-[13px] leading-relaxed text-onix-500">
+            No Supabase, SQL Editor, rode{' '}
+            <code className="font-mono text-[12px]">conceder_acesso_agenda</code>{' '}
+            (acesso só à agenda) ou{' '}
+            <code className="font-mono text-[12px]">autorizar_conta</code>{' '}
+            (acesso completo). O passo a passo está em{' '}
+            <code className="font-mono text-[12px]">docs/ACESSO-SAMARA.md</code>.
+          </p>
+        </div>
+
+        <button
+          onClick={() => void sair()}
+          className="mt-5 text-[13px] font-medium text-onix-400 transition-colors hover:text-onix-800"
+        >
+          Sair e entrar com outra conta
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -33,6 +89,30 @@ export function Protegida({ children }: { children: ReactNode }) {
 export function SomenteGestor({ children }: { children: ReactNode }) {
   const { ehGestor } = useSessao()
   if (!ehGestor) return <Navigate to={ROTAS.painel} replace />
+  return <>{children}</>
+}
+
+/**
+ * Fecha tudo que não é a agenda.
+ *
+ * O contrário de `SomenteGestor`: aquela abre telas para quem manda,
+ * esta fecha para quem foi convidado a ver só um pedaço. É a guarda da
+ * profissional parceira — a manicure que divide o espaço e precisa dos
+ * horários sem alcançar o caixa nem a ficha das clientes do salão.
+ *
+ * O destino é a agenda, não o painel: mandar para `/` daria uma volta —
+ * o painel também é fechado para ela — e a pessoa veria a tela piscar
+ * duas vezes antes de parar onde deveria ter chegado direto.
+ *
+ * **Isto continua sendo interface.** Quem digitar o endereço com a
+ * ferramenta certa passa por aqui; o que ele não passa é pelo RLS do
+ * Postgres, e é lá que a restrição vale de fato (10-acesso-agenda.sql).
+ * As duas camadas existem porque servem a coisas diferentes: esta evita
+ * que a pessoa se perca, aquela evita que ela leia.
+ */
+export function ExigeAcessoCompleto({ children }: { children: ReactNode }) {
+  const { soAgenda } = useSessao()
+  if (soAgenda) return <Navigate to={ROTAS.agenda} replace />
   return <>{children}</>
 }
 

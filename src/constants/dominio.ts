@@ -27,10 +27,25 @@ export const PAPEL: Record<Papel, string> = {
   gerente: 'Gerente',
   profissional: 'Profissional',
   recepcao: 'Recepção',
+  agenda: 'Profissional (só agenda)',
 }
 
 /** Quem enxerga financeiro, metas e configurações. */
 export const PAPEIS_GESTORES: Papel[] = ['proprietaria', 'gerente']
+
+/**
+ * Quem só enxerga a agenda.
+ *
+ * A lista existe em vez de uma comparação solta com a string `'agenda'`
+ * pelo mesmo motivo de `PAPEIS_GESTORES`: no dia em que houver um
+ * segundo nível restrito, ele entra aqui e todas as telas obedecem —
+ * em vez de aparecer meia dúzia de `papel === 'agenda'` espalhados,
+ * dos quais um sempre fica para trás.
+ */
+export const PAPEIS_SO_AGENDA: Papel[] = ['agenda']
+
+/** Acesso restrito à agenda? */
+export const ehSoAgenda = (papel: Papel): boolean => PAPEIS_SO_AGENDA.includes(papel)
 
 export const FORMA_PAGAMENTO: Record<FormaPagamento, string> = {
   dinheiro: 'Dinheiro',
