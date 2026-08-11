@@ -357,21 +357,69 @@ function usePrenderFoco(aberto: boolean, painel: React.RefObject<HTMLElement>) {
 }
 
 /** Esc fecha e o fundo para de rolar enquanto o diálogo está aberto. */
+/**
+ * Quantos modais estão abertos agora.
+ *
+ * ---------------------------------------------------------------
+ * A tela que travava
+ * ---------------------------------------------------------------
+ * Cada modal guardava o `overflow` anterior do `body` e o restaurava ao
+ * fechar. Com um modal só, funciona. Com dois — e há dois o tempo todo,
+ * porque `Confirmar` é um Modal que abre POR CIMA do formulário —,
+ * depende da ordem em que eles são desmontados:
+ *
+ *   formulário abre       anterior = ''        body = hidden
+ *   Confirmar abre        anterior = 'hidden'  body = hidden
+ *   formulário fecha      restaura ''
+ *   Confirmar fecha       restaura 'hidden'  ← e fica assim
+ *
+ * O `body` ficava travado sem nenhum modal na tela. A página parava de
+ * rolar, o conteúdo abaixo da dobra sumia, e nada indicava o motivo —
+ * a única saída era recarregar ou fechar o aplicativo. É o relato de
+ * \"entrei numa tela e não consigo sair\".
+ *
+ * A ordem de desmontagem não é garantida pelo React, então guardar o
+ * valor anterior nunca ia funcionar. O contador não depende de ordem:
+ * trava quando o primeiro abre, solta quando o último fecha.
+ */
+let modaisAbertos = 0
+
+function travarFundo(): void {
+  modaisAbertos += 1
+  if (modaisAbertos === 1) document.body.style.overflow = 'hidden'
+}
+
+function soltarFundo(): void {
+  modaisAbertos = Math.max(modaisAbertos - 1, 0)
+  if (modaisAbertos === 0) document.body.style.overflow = ''
+}
+
 function useTravarFundo(aberto: boolean, aoFechar: () => void) {
+  /*
+    A referência evita que o efeito reinicie a cada render do pai.
+
+    `aoFechar` costuma chegar como função inline — `() => setX(null)` —,
+    que é nova a cada render. Com ela nas dependências, o efeito
+    desmontava e remontava sem parar: contador subindo e descendo,
+    listener removido e recriado, tudo isso enquanto a proprietária
+    apenas digitava no formulário.
+  */
+  const fecharRef = useRef(aoFechar)
+  fecharRef.current = aoFechar
+
   useEffect(() => {
     if (!aberto) return
 
     const aoTeclar = (evento: KeyboardEvent) => {
-      if (evento.key === 'Escape') aoFechar()
+      if (evento.key === 'Escape') fecharRef.current()
     }
 
-    const anterior = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    travarFundo()
     document.addEventListener('keydown', aoTeclar)
 
     return () => {
-      document.body.style.overflow = anterior
+      soltarFundo()
       document.removeEventListener('keydown', aoTeclar)
     }
-  }, [aberto, aoFechar])
+  }, [aberto])
 }
