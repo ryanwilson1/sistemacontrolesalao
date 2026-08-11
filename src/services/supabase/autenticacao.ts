@@ -265,11 +265,21 @@ export function aoMudarSessao(quando: (dentro: boolean) => void): () => void {
   const { data } = supabase().auth.onAuthStateChange((evento, sessao) => {
     // `TOKEN_REFRESHED` sem sessão é o sinal de que a renovação falhou:
     // o token venceu de vez e a pessoa precisa entrar de novo.
+    /*
+      `INITIAL_SESSION` entra na lista.
+
+      É o evento que o Supabase dispara ao abrir a página com sessão já
+      guardada — o caso mais comum de todos. Ele estava de fora, e isso
+      não aparecia porque `inscrever()` abria o canal por conta própria.
+      Ao tirar aquela linha (ver CanalSupabase), esta virou a única
+      forma de o tempo real subir num F5.
+    */
     if (
       evento === 'SIGNED_OUT' ||
       evento === 'TOKEN_REFRESHED' ||
       evento === 'SIGNED_IN' ||
-      evento === 'USER_UPDATED'
+      evento === 'USER_UPDATED' ||
+      evento === 'INITIAL_SESSION'
     ) {
       quando(!!sessao)
     }
