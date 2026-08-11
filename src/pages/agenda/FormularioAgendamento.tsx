@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { AreaTexto, Botao, Campo, Entrada, Modal, Selecao } from '@/components/ui'
+import { AreaTexto, Botao, Campo, CampoMoeda, Entrada, Modal, Selecao } from '@/components/ui'
 import { Confirmar } from '@/components/feedback'
 import { useSessao } from '@/contexts'
 import { ROTAS } from '@/constants'
@@ -137,19 +137,33 @@ export function FormularioAgendamento(props: Props) {
           */}
           {!soAgenda && (
             <div className="grid gap-4 sm:grid-cols-2">
+              {/*
+                `CampoMoeda`, não `type="number"`.
+
+                O formulário guarda o preço em formato brasileiro —
+                `formatarMoedaBR` grava "100,00" — e o campo numérico do
+                navegador **recusa a vírgula**. O estrago era duplo e
+                silencioso:
+
+                  · abrir um agendamento existente mostrava o campo de
+                    valor VAZIO, como se não houvesse preço;
+                  · `Number("100,00")` é NaN, então o "Total" ao lado do
+                    desconto sumia.
+
+                O console acusava "The specified value '100,00' cannot
+                be parsed", que ninguém vê. A proprietária via o campo
+                em branco e concluía que o sistema tinha perdido o
+                valor.
+
+                Este componente já existia e é usado nos outros dez
+                formulários financeiros. Estes dois campos ficaram para
+                trás.
+              */}
               <Campo rotulo="Valor">
-                <Entrada
-                  type="number" step="0.01" min="0" inputMode="decimal"
-                  value={formulario.preco} onChange={(e) => formulario.setPreco(e.target.value)}
-                  prefixo={<span className="text-[13px]">R$</span>}
-                />
+                <CampoMoeda value={formulario.preco} onChange={formulario.setPreco} />
               </Campo>
               <Campo rotulo="Desconto" dica={formulario.total > 0 ? `Total: ${dinheiro(formulario.total)}` : undefined}>
-                <Entrada
-                  type="number" step="0.01" min="0" inputMode="decimal"
-                  value={formulario.desconto} onChange={(e) => formulario.setDesconto(e.target.value)}
-                  prefixo={<span className="text-[13px]">R$</span>}
-                />
+                <CampoMoeda value={formulario.desconto} onChange={formulario.setDesconto} />
               </Campo>
             </div>
           )}

@@ -241,7 +241,18 @@ export function usarFormularioDeAgendamento({
     aoFechar()
   }
 
-  const total = Math.max(Number(preco || 0) - Number(desconto || 0), 0)
+  /*
+    `moedaOuZero`, não `Number`.
+
+    Os dois campos guardam texto em formato brasileiro, e
+    `Number("100,00")` é NaN — não zero, NaN. O total desaparecia da
+    tela (a dica só aparece com `total > 0`) exatamente quando havia um
+    valor preenchido, que é quando ela serve.
+
+    O mesmo parser que o `CampoMoeda` usa para gravar precisa ser o que
+    lê aqui. Enquanto forem dois, eles discordam.
+  */
+  const total = Math.max(moedaOuZero(preco) - moedaOuZero(desconto), 0)
   const encerrado = !!agendamento && ['cancelado', 'concluido'].includes(agendamento.situacao)
 
   return {
