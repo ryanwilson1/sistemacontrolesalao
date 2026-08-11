@@ -3,7 +3,7 @@ import { CalendarX2, Clock } from 'lucide-react'
 import { EstadoVazio } from '@/components/feedback'
 import { Retrato } from '@/components/ui'
 import { useAtendentes, useRemarcar } from '@/hooks'
-import { useAviso } from '@/contexts'
+import { useAviso, useSessao } from '@/contexts'
 import { GRADE_AGENDA, SITUACAO, TIPO_BLOQUEIO } from '@/constants'
 import { dt, hora, isSameDay, minutosDoDia, startOfDay } from '@/utils/datas'
 import { dinheiro, duracao } from '@/utils/formato'
@@ -29,6 +29,7 @@ interface Props {
  */
 export function VisaoDia({ dia, agendamentos, bloqueios, aoAbrir, aoCriar }: Props) {
   const { dados: atendentes } = useAtendentes()
+  const { soAgenda } = useSessao()
   const remarcar = useRemarcar()
   const aviso = useAviso()
   const [arrastando, setArrastando] = useState<string | null>(null)
@@ -255,7 +256,16 @@ export function VisaoDia({ dia, agendamentos, bloqueios, aoAbrir, aoCriar }: Pro
           {doDia.filter((a) => a.situacao !== 'cancelado').length} atendimentos
         </span>
         <span className="tabular">{duracao(minutosOcupados)} ocupados</span>
-        <span className="tabular ml-auto font-medium text-onix-700">{dinheiro(totalDoDia)}</span>
+        {/*
+          O total do dia some no acesso restrito.
+
+          Ela precisa da agenda, não do faturamento do salão. Deixar a
+          soma aqui entregaria por um rodapé exatamente o número que a
+          tela de Financeiro foi fechada para proteger.
+        */}
+        {!soAgenda && (
+          <span className="tabular ml-auto font-medium text-onix-700">{dinheiro(totalDoDia)}</span>
+        )}
       </div>
     </div>
   )

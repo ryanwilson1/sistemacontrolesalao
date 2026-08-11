@@ -8,6 +8,26 @@ import { ErroDeRegra, mensagemDeErro } from '@/utils/erros'
 import type { Papel, Profissional } from '@/types'
 
 /**
+ * O que cada função abre — dito no momento da escolha.
+ *
+ * A lista de opções sozinha não conta a diferença que mais importa:
+ * "Profissional" enxerga clientes, estoque e caixa; "Profissional
+ * (só agenda)" enxerga a agenda e nada mais. São dois itens vizinhos
+ * num menu suspenso, e escolher o errado é dar acesso ao salão inteiro
+ * a quem só deveria marcar horário.
+ */
+function dicaDoPapel(papel: Papel): string {
+  if (papel === 'agenda') {
+    return 'Só a agenda. Não enxerga faturamento, caixa, estoque nem a lista de clientes. ' +
+      'É a opção para a profissional parceira que divide o espaço.'
+  }
+  if (papel === 'proprietaria' || papel === 'gerente') {
+    return 'Acesso completo, incluindo financeiro, relatórios e ajustes do salão.'
+  }
+  return 'Enxerga agenda, clientes, serviços, estoque e caixa — não vê financeiro nem ajustes.'
+}
+
+/**
  * Cadastro e edição de quem trabalha no studio.
  *
  * Esta tela não existia. A aba Equipe sabia apenas *editar* quem já
@@ -116,7 +136,7 @@ export function FormularioProfissional({
           vier depois. Se um dia o contato da equipe for necessário, ele
           nasce junto com o lugar que vai usá-lo.
         */}
-        <Campo rotulo="Função">
+        <Campo rotulo="Função" dica={dicaDoPapel(papel)}>
           <Selecao value={papel} onChange={(e) => setPapel(e.target.value as Papel)}>
             {Object.entries(PAPEL).map(([valor, rotulo]) => (
               <option key={valor} value={valor}>{rotulo}</option>
@@ -157,6 +177,13 @@ export function FormularioProfissional({
         <p className="rounded-xl border border-ouro-200 bg-ouro-100/50 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ouro-700">
           Cadastrar aqui coloca a pessoa na agenda — não cria acesso ao sistema.
           Para dar login a alguém, o administrador cria a conta no Supabase.
+          {papel === 'agenda' && (
+            <>
+              {' '}Com a função <strong>só agenda</strong>, a restrição precisa ser
+              aplicada também no banco — veja <code className="font-mono text-[12px]">10-acesso-agenda.sql</code>.
+              Sem esse passo, o menu fica escondido mas os dados continuam alcançáveis.
+            </>
+          )}
         </p>
       </div>
     </Modal>

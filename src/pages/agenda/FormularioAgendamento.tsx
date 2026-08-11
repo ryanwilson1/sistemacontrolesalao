@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { AreaTexto, Botao, Campo, Entrada, Modal, Selecao } from '@/components/ui'
 import { Confirmar } from '@/components/feedback'
+import { useSessao } from '@/contexts'
 import { ROTAS } from '@/constants'
 import { dinheiro, duracao } from '@/utils/formato'
 import { dataRelativa, hora, isoData } from '@/utils/datas'
@@ -24,6 +25,7 @@ interface Props {
 export function FormularioAgendamento(props: Props) {
   const { aberto, aoFechar, agendamento } = props
   const formulario = usarFormularioDeAgendamento(props)
+  const { soAgenda } = useSessao()
 
   return (
     <>
@@ -86,7 +88,8 @@ export function FormularioAgendamento(props: Props) {
                 <option value="">Escolha o serviço</option>
                 {formulario.servicos?.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.nome} · {duracao(item.duracaoMinutos)} · {dinheiro(item.preco)}
+                    {item.nome} · {duracao(item.duracaoMinutos)}
+                    {soAgenda ? '' : ` · ${dinheiro(item.preco)}`}
                   </option>
                 ))}
               </Selecao>
@@ -120,22 +123,36 @@ export function FormularioAgendamento(props: Props) {
             pronto={!!formulario.servicoId && !!formulario.profissionalId}
           />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Campo rotulo="Valor">
-              <Entrada
-                type="number" step="0.01" min="0" inputMode="decimal"
-                value={formulario.preco} onChange={(e) => formulario.setPreco(e.target.value)}
-                prefixo={<span className="text-[13px]">R$</span>}
-              />
-            </Campo>
-            <Campo rotulo="Desconto" dica={formulario.total > 0 ? `Total: ${dinheiro(formulario.total)}` : undefined}>
-              <Entrada
-                type="number" step="0.01" min="0" inputMode="decimal"
-                value={formulario.desconto} onChange={(e) => formulario.setDesconto(e.target.value)}
-                prefixo={<span className="text-[13px]">R$</span>}
-              />
-            </Campo>
-          </div>
+          {/*
+            Valor e desconto só para quem cuida do dinheiro.
+
+            Escondidos, o preço continua vindo do cadastro do serviço —
+            é o que `usarFormularioDeAgendamento` já faz ao escolher o
+            serviço. Ou seja: ela marca o horário, o valor entra
+            correto, e ninguém precisa conferir depois.
+
+            Deixar os campos visíveis e apenas travados seria pior:
+            mostraria a tabela de preços a quem não deve vê-la, e ainda
+            pareceria defeito.
+          */}
+          {!soAgenda && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Campo rotulo="Valor">
+                <Entrada
+                  type="number" step="0.01" min="0" inputMode="decimal"
+                  value={formulario.preco} onChange={(e) => formulario.setPreco(e.target.value)}
+                  prefixo={<span className="text-[13px]">R$</span>}
+                />
+              </Campo>
+              <Campo rotulo="Desconto" dica={formulario.total > 0 ? `Total: ${dinheiro(formulario.total)}` : undefined}>
+                <Entrada
+                  type="number" step="0.01" min="0" inputMode="decimal"
+                  value={formulario.desconto} onChange={(e) => formulario.setDesconto(e.target.value)}
+                  prefixo={<span className="text-[13px]">R$</span>}
+                />
+              </Campo>
+            </div>
+          )}
 
           <Campo rotulo="Observação" dica="Preferências, alergias, combinados do atendimento.">
             <AreaTexto

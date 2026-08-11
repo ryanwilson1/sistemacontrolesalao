@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { CalendarX2 } from 'lucide-react'
 import { EstadoVazio } from '@/components/feedback'
+import { useSessao } from '@/contexts'
 import { SITUACAO } from '@/constants'
-import { diasDaSemana, dt, format, hora, isSameDay } from '@/utils/datas'
+import { diaDaSemana, diasDaSemana, dt, format, hora, isSameDay } from '@/utils/datas'
 import { dinheiro } from '@/utils/formato'
 import { cn } from '@/utils/cn'
 import type { AgendamentoDetalhado } from '@/types'
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function VisaoSemana({ dia, agendamentos, aoAbrir, aoTrocarDia }: Props) {
+  const { soAgenda } = useSessao()
   const dias = useMemo(() => diasDaSemana(dia), [dia])
 
   const porDia = useMemo(() => {
@@ -61,7 +63,7 @@ export function VisaoSemana({ dia, agendamentos, aoAbrir, aoTrocarDia }: Props) 
             >
               <span className="min-w-0">
                 <span className="block truncate text-[10.5px] uppercase tracking-[0.16em] text-onix-300">
-                  {format(data, 'EEEE')}
+                  {diaDaSemana(data)}
                 </span>
                 <span
                   className={cn(
@@ -106,7 +108,7 @@ export function VisaoSemana({ dia, agendamentos, aoAbrir, aoTrocarDia }: Props) 
               )}
             </ul>
 
-            {total > 0 && (
+            {total > 0 && !soAgenda && (
               <p className="tabular border-t border-onix-50 bg-quartzo-50 px-4 py-2 text-right text-[12px] font-medium text-onix-600">
                 {dinheiro(total)}
               </p>

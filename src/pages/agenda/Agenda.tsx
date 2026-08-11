@@ -6,8 +6,8 @@ import { Abas, Botao } from '@/components/ui'
 import { EstadoErro, EsqueletoLista } from '@/components/feedback'
 import { useAgendamentos, useBloqueios } from '@/hooks'
 import {
-  addDays, dataRelativa, diasDaSemana, diasDoMes, faixaDeDias, faixaDoDia,
-  format, isSameDay, mesAno, semanaDe, startOfMonth,
+  addDays, dataRelativa, diaDaSemanaMini, diaEMes, diasDaSemana, diasDoMes,
+  faixaDeDias, faixaDoDia, format, isSameDay, mesAno, semanaDe, startOfMonth,
 } from '@/utils/datas'
 import { cn } from '@/utils/cn'
 import { VisaoDia } from './VisaoDia'
@@ -54,7 +54,7 @@ export default function Agenda() {
     visao === 'dia'
       ? dataRelativa(dia)
       : visao === 'semana'
-        ? `${format(semanaDe(dia).inicio, 'd MMM')} — ${format(semanaDe(dia).fim, 'd MMM')}`
+        ? `${diaEMes(semanaDe(dia).inicio)} — ${diaEMes(semanaDe(dia).fim)}`
         : mesAno(dia)
 
   const abrirDia = (novoDia: Date) => {
@@ -125,7 +125,7 @@ export default function Agenda() {
                 )}
               >
                 <span className="text-[10px] uppercase tracking-wider opacity-70">
-                  {format(data, 'EEEEEE')}
+                  {diaDaSemanaMini(data)}
                 </span>
                 <span className="tabular font-display text-[17px] leading-none">
                   {format(data, 'd')}
