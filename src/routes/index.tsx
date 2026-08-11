@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, type ComponentType } from 'react'
 import {
   createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider,
 } from 'react-router-dom'
@@ -29,30 +29,89 @@ function Contorno() {
 }
 
 /**
+ * `lazy` que sobrevive a uma publicação nova.
+ *
+ * ---------------------------------------------------------------
+ * O problema
+ * ---------------------------------------------------------------
+ * Cada página vira um arquivo com o conteúdo no nome —
+ * `Assistente-D4L5MxzY.js`. Publicar de novo gera nomes novos e apaga
+ * os antigos.
+ *
+ * Quem estava com o sistema aberto durante a publicação continua com o
+ * `index.html` velho na memória, apontando para arquivos que não
+ * existem mais. Clicar em Assistente ou Financeiro devolve 404, e o
+ * React Router mostra a tela de erro:
+ *
+ *   Failed to fetch dynamically imported module
+ *
+ * Não é falha do código nem do servidor. É o preço de ter cada página
+ * em seu próprio pacote — e acontece TODA vez que se publica com
+ * alguém usando. A proprietária ia ver isso, sem entender, e concluir
+ * que o sistema quebrou.
+ *
+ * ---------------------------------------------------------------
+ * A correção
+ * ---------------------------------------------------------------
+ * Falhou ao buscar o pedaço? Recarrega a página uma vez. O
+ * `index.html` novo chega, aponta para os arquivos certos, e a pessoa
+ * cai na tela que pediu.
+ *
+ * A marca no `sessionStorage` é o que impede o laço infinito: se a
+ * recarga não resolver — servidor fora, rede caída —, o erro sobe
+ * normalmente e o `LimiteDeErro` mostra a mensagem. Recarregar duas
+ * vezes seria trocar um erro visível por uma tela piscando para
+ * sempre, que é pior.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazyComRecarga<T extends { default: ComponentType<any> }>(
+  importar: () => Promise<T>,
+) {
+  return lazy(() =>
+    importar().catch((falha) => {
+      const CHAVE = 'studio:recarregou-por-pacote-ausente'
+      const jaTentou = sessionStorage.getItem(CHAVE)
+
+      if (!jaTentou) {
+        sessionStorage.setItem(CHAVE, '1')
+        window.location.reload()
+        // A recarga não é instantânea; esta promessa nunca resolve, e
+        // é o certo: resolver mostraria a tela de erro por um instante
+        // antes de a página trocar.
+        return new Promise<T>(() => {})
+      }
+
+      sessionStorage.removeItem(CHAVE)
+      throw falha
+    }),
+  )
+}
+
+/**
  * Cada página entra em seu próprio pacote.
  * O link público de agendamento não baixa uma linha do painel.
  */
-const Entrar         = lazy(() => import('@/pages/acesso/Entrar'))
-const NovaSenha      = lazy(() => import('@/pages/acesso/NovaSenha'))
-const Painel         = lazy(() => import('@/pages/painel/Painel'))
-const Agenda         = lazy(() => import('@/pages/agenda/Agenda'))
-const Clientes       = lazy(() => import('@/pages/clientes/Clientes'))
-const FichaCliente   = lazy(() => import('@/pages/clientes/FichaCliente'))
-const Servicos       = lazy(() => import('@/pages/servicos/Servicos'))
-const Estoque        = lazy(() => import('@/pages/estoque/Estoque'))
-const Financeiro     = lazy(() => import('@/pages/financeiro/Financeiro'))
-const Caixa          = lazy(() => import('@/pages/caixa/Caixa'))
-const Cupons         = lazy(() => import('@/pages/cupons/Cupons'))
-const Fidelidade     = lazy(() => import('@/pages/fidelidade/Fidelidade'))
-const Relatorios     = lazy(() => import('@/pages/relatorios/Relatorios'))
-const Configuracoes  = lazy(() => import('@/pages/configuracoes/Configuracoes'))
-const Backup         = lazy(() => import('@/pages/backup/Backup'))
-const Lembretes      = lazy(() => import('@/pages/lembretes/Lembretes'))
-const Assistente     = lazy(() => import('@/pages/assistente/Assistente'))
-const Portal         = lazy(() => import('@/pages/portal/Portal'))
-const Agendamento    = lazy(() => import('@/pages/agendamento/Agendamento'))
-const MeuHorario     = lazy(() => import('@/pages/agendamento/MeuHorario'))
-const NaoEncontrada  = lazy(() => import('@/pages/NaoEncontrada'))
+const Entrar         = lazyComRecarga(() => import('@/pages/acesso/Entrar'))
+const NovaSenha      = lazyComRecarga(() => import('@/pages/acesso/NovaSenha'))
+const Painel         = lazyComRecarga(() => import('@/pages/painel/Painel'))
+const Agenda         = lazyComRecarga(() => import('@/pages/agenda/Agenda'))
+const Clientes       = lazyComRecarga(() => import('@/pages/clientes/Clientes'))
+const FichaCliente   = lazyComRecarga(() => import('@/pages/clientes/FichaCliente'))
+const Servicos       = lazyComRecarga(() => import('@/pages/servicos/Servicos'))
+const Estoque        = lazyComRecarga(() => import('@/pages/estoque/Estoque'))
+const Financeiro     = lazyComRecarga(() => import('@/pages/financeiro/Financeiro'))
+const Caixa          = lazyComRecarga(() => import('@/pages/caixa/Caixa'))
+const Cupons         = lazyComRecarga(() => import('@/pages/cupons/Cupons'))
+const Fidelidade     = lazyComRecarga(() => import('@/pages/fidelidade/Fidelidade'))
+const Relatorios     = lazyComRecarga(() => import('@/pages/relatorios/Relatorios'))
+const Configuracoes  = lazyComRecarga(() => import('@/pages/configuracoes/Configuracoes'))
+const Backup         = lazyComRecarga(() => import('@/pages/backup/Backup'))
+const Lembretes      = lazyComRecarga(() => import('@/pages/lembretes/Lembretes'))
+const Assistente     = lazyComRecarga(() => import('@/pages/assistente/Assistente'))
+const Portal         = lazyComRecarga(() => import('@/pages/portal/Portal'))
+const Agendamento    = lazyComRecarga(() => import('@/pages/agendamento/Agendamento'))
+const MeuHorario     = lazyComRecarga(() => import('@/pages/agendamento/MeuHorario'))
+const NaoEncontrada  = lazyComRecarga(() => import('@/pages/NaoEncontrada'))
 
 /**
  * As rotas.
