@@ -34,6 +34,22 @@ create table if not exists studio (
   intervalo_minutos        integer not null default 15,
   confirmacao_manual       boolean not null default false,
   atendimentos_simultaneos integer not null default 0,
+
+  /*
+    Teto de atendimentos por dia. Zero significa sem teto.
+
+    Estava faltando. O tipo `Studio` do TypeScript declarava
+    `limiteDiario` e o motor de horários já o consultava, mas a coluna
+    nunca chegou ao banco. O efeito foi um 400 em toda gravação do
+    studio:
+
+      POST /rest/v1/studio?on_conflict=id&columns=...,"limite_diario"
+      → 400 Bad Request
+
+    Nenhuma configuração do salão salvava, e a mensagem não dizia qual
+    coluna estava sobrando.
+  */
+  limite_diario  integer not null default 0,
   reserva_minutos          integer not null default 5,
   escolha_de_profissional  boolean not null default true,
   aceita_solicitacoes      boolean not null default true,

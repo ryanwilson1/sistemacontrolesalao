@@ -191,7 +191,11 @@ returns table (
   confirmacao_manual boolean, atendimentos_simultaneos integer,
   reserva_minutos integer, escolha_de_profissional boolean,
   aceita_solicitacoes boolean, lista_espera_ativa boolean,
-  checkin_ativo boolean, recado_do_portal text, fuso text
+  checkin_ativo boolean, recado_do_portal text, fuso text,
+  -- Faltava. O teto diário existia na tabela, aparecia em Ajustes e
+  -- nunca chegava ao portal — que é o único lugar onde ele precisa
+  -- valer, porque é o único que agenda sem ninguém olhando.
+  limite_diario integer
 )
 language sql security definer set search_path = public stable as $fn$
   -- Nenhuma coluna sensível existe nesta tabela, mas a lista é explícita
@@ -203,7 +207,8 @@ language sql security definer set search_path = public stable as $fn$
          s.confirmacao_manual, s.atendimentos_simultaneos,
          s.reserva_minutos, s.escolha_de_profissional,
          s.aceita_solicitacoes, s.lista_espera_ativa,
-         s.checkin_ativo, s.recado_do_portal, s.fuso
+         s.checkin_ativo, s.recado_do_portal, s.fuso,
+         s.limite_diario
   from studio s
   where p_identificador is null or s.identificador = p_identificador
   limit 1;

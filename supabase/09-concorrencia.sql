@@ -112,6 +112,25 @@ begin
     raise exception 'Tabela nao permitida: %', p_tabela;
   end if;
 
+  /*
+    Segunda lista, mais curta, para o acesso restrito à agenda.
+
+    Bloquear a função inteira não serve: é por ela que a remarcação de
+    um agendamento passa, e remarcar é justamente o que a conta
+    restrita precisa fazer.
+
+    O que ela não pode é o resto da lista acima. `lancamentos` deixaria
+    a receita editável; `produtos`, o estoque; `studio`, os próprios
+    limites da agenda — incluindo desligar o teto diário. E, como a
+    função devolve `to_jsonb` da linha alterada, ela servia também de
+    leitura: mudar um campo inofensivo e ler o registro financeiro
+    completo na resposta.
+  */
+  if (select acesso_so_agenda())
+     and p_tabela not in ('agendamentos','clientes') then
+    raise exception 'Sem permissao para alterar %.', p_tabela;
+  end if;
+
   execute format('select versao from public.%I where id = $1 for update', p_tabela)
     into v_atual using p_id;
 
@@ -194,7 +213,10 @@ declare
   v_dados   jsonb;
   v_qtd     integer;
 begin
-  if not (select equipe_autorizada()) then
+  -- Restaurar APAGA e substitui 27 tabelas. É a operação mais
+  -- destrutiva do sistema, e estava ao alcance de qualquer conta
+  -- autenticada — inclusive a de acesso restrito à agenda.
+  if not (select equipe_com_acesso_completo()) then
     raise exception 'Sem permissao para restaurar backup.';
   end if;
 
@@ -281,7 +303,16 @@ declare
   v_tab   text;
   v_dados jsonb;
 begin
-  if not (select equipe_autorizada()) then
+  -- Acesso completo, não apenas "está na casa".
+  --
+  -- Esta função devolve 26 tabelas inteiras num JSON — faturamento,
+  -- caixa, estoque, fichas de evolução e fotos das clientes. Com
+  -- `equipe_autorizada()`, uma conta de acesso restrito à agenda
+  -- chamava `rpc('instantaneo_do_studio')` e recebia o salão inteiro,
+  -- passando por cima de todas as políticas do 10-acesso-agenda.sql.
+  -- `security definer` ignora RLS por definição; a checagem do papel
+  -- precisa estar aqui dentro.
+  if not (select equipe_com_acesso_completo()) then
     raise exception 'Sem permissao para ler os dados do studio.';
   end if;
 
@@ -358,3 +389,63 @@ end $fn$;
 
 revoke all on function portal_cheguei(text,text) from public;
 grant execute on function portal_cheguei(text,text) to anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- 5. Coluna que faltava em `studio`
+-- ---------------------------------------------------------------------
+-- O tipo `Studio` do TypeScript declara `limiteDiario` e o motor de
+-- horários já o consulta — mas a coluna nunca chegou ao banco. Como o
+-- sistema grava o studio por upsert com a lista de colunas explícita,
+-- toda gravação virava:
+--
+--   POST /rest/v1/studio?on_conflict=id&columns=...,"limite_diario"
+--   → 400 Bad Request
+--
+-- Nenhuma configuração do salão salvava, e a resposta não dizia qual
+-- coluna estava sobrando. Aqui para quem já rodou o 01-esquema.sql
+-- antes da correção.
+alter table studio add column if not exists limite_diario integer not null default 0;
+
+-- ---------------------------------------------------------------------
+-- 6. Tetos que faltavam
+-- ---------------------------------------------------------------------
+-- O `05-integridade.sql` já barra duração zero e preço negativo. O que
+-- faltava era o outro lado: valores absurdamente ALTOS.
+--
+-- Um serviço de 900 minutos passou pela tela num teste real. Quinze
+-- horas — mais do que o salão fica aberto. O efeito não é um erro
+-- visível: a agenda simplesmente para de oferecer horário para aquele
+-- serviço, e ninguém liga uma coisa à outra.
+--
+-- Errar para baixo salta aos olhos no primeiro agendamento. Errar para
+-- cima só aparece quando a cliente diz que não achou vaga.
+do $$
+declare
+  r record;
+  regras constant text[][] := array[
+    ['servicos', 'servico_duracao_com_teto',   $c$duracao_minutos between 5 and 720$c$],
+    ['servicos', 'servico_intervalo_com_teto', $c$intervalo_minutos between 0 and 120$c$],
+    ['servicos', 'servico_preco_com_teto',     $c$preco >= 0 and preco <= 100000$c$],
+    ['produtos', 'produto_precos_com_teto',
+     $c$preco_custo <= 1000000 and preco_venda <= 1000000 and quantidade <= 1000000$c$],
+    ['studio',   'studio_antecedencia_com_teto',
+     $c$antecedencia_minutos between 0 and 10080$c$],
+    ['studio',   'studio_limite_diario_sensato', $c$limite_diario between 0 and 200$c$],
+    ['agendamentos', 'agendamento_duracao_sensata',
+     $c$fim > inicio and fim <= inicio + interval '12 hours'$c$]
+  ];
+begin
+  for r in select regras[i][1] as tabela, regras[i][2] as nome, regras[i][3] as cond
+           from generate_subscripts(regras, 1) as i
+  loop
+    if to_regclass('public.' || r.tabela) is null then continue; end if;
+    execute format('alter table public.%I drop constraint if exists %I', r.tabela, r.nome);
+    execute format('alter table public.%I add constraint %I check (%s) not valid',
+                   r.tabela, r.nome, r.cond);
+    begin
+      execute format('alter table public.%I validate constraint %I', r.tabela, r.nome);
+    exception when others then
+      raise notice 'Constraint % nao validada nos dados existentes: %', r.nome, sqlerrm;
+    end;
+  end loop;
+end $$;

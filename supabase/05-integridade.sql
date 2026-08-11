@@ -337,8 +337,26 @@ alter table auditoria enable row level security;
 drop policy if exists "equipe da casa" on public.auditoria;
 drop policy if exists "ler a trilha"   on public.auditoria;
 
+/*
+  Acesso completo para ler a trilha.
+
+  A segunda auditoria encontrou aqui o vazamento mais silencioso do
+  sistema. `auditoria.dados_anteriores` guarda a linha INTEIRA anterior
+  a cada alteração, e o gatilho `trilha` está em **todas** as tabelas.
+  A trilha é, na prática, uma cópia sombra do banco — faturamento,
+  caixa, estoque, fichas.
+
+  Com `equipe_autorizada()`, uma conta de acesso restrito à agenda
+  fazia:
+
+    select * from auditoria where tabela = 'lancamentos'
+
+  e recebia o histórico financeiro completo, contornando as políticas
+  do 10-acesso-agenda.sql sem tocar em nenhuma delas. Fechar a porta da
+  frente e deixar a trilha aberta é não ter fechado nada.
+*/
 create policy "ler a trilha" on public.auditoria
-  for select to authenticated using ((select equipe_autorizada()));
+  for select to authenticated using ((select equipe_com_acesso_completo()));
 
 revoke insert, update, delete on public.auditoria from authenticated, anon;
 grant select on public.auditoria to authenticated;
@@ -349,6 +367,18 @@ create or replace function limpar_auditoria(p_dias integer default 365)
 returns integer language plpgsql security definer set search_path = public as $fn$
 declare v_apagados integer;
 begin
+  -- Estava sem guarda. Apagar a trilha de auditoria é exatamente o que
+  -- alguém faria para esconder o que fez — e era permitido a qualquer
+  -- conta autenticada, inclusive à de acesso restrito.
+  --
+  -- A faxina diária chama isto ao abrir o sistema; a chamada de quem
+  -- não tem acesso passa a devolver zero em vez de apagar. É por isso
+  -- que ela devolve em vez de lançar: a faxina é rotina de fundo e não
+  -- deve encher a tela de ninguém com erro.
+  if not (select equipe_com_acesso_completo()) then
+    return 0;
+  end if;
+
   delete from auditoria where em < now() - make_interval(days => greatest(p_dias, 30));
   get diagnostics v_apagados = row_count;
   return v_apagados;

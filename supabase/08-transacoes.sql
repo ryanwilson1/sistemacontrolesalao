@@ -58,7 +58,10 @@ declare
   v_medio    numeric;
   v_custo    numeric;
 begin
-  if not (select equipe_autorizada()) then
+  -- Estoque é uma das áreas fechadas para o acesso restrito
+  -- (10-acesso-agenda.sql). Sem esta troca, a política de tabela era
+  -- contornável por uma chamada direta a esta RPC.
+  if not (select equipe_com_acesso_completo()) then
     raise exception 'Sem permissao para movimentar o estoque.';
   end if;
 
@@ -273,12 +276,28 @@ grant execute on function concluir_atendimento(text,jsonb,text,text,text,text) t
 -- ---------------------------------------------------------------------
 -- Responde à pergunta que motivou este arquivo: sobrou algum estado
 -- pela metade de antes da correção? Roda sem alterar nada.
+/*
+  Conferência de integridade.
+
+  A auditoria encontrou esta função **sem guarda nenhuma** — só o
+  `grant execute to authenticated`. Sendo `security definer`, ela lia
+  `lancamentos`, `movimentos_caixa`, `pontos` e `produtos` por cima do
+  RLS e devolvia `min(descricao)` e `min(nome)` de cada um. Não é a
+  tabela inteira, mas é vazamento: descrição de lançamento e nome de
+  produto saindo para quem não pode abrir nem uma tela nem outra.
+
+  A checagem entra em cada ramo em vez de num `raise` porque a função
+  é `language sql`. O efeito para quem não tem acesso é o mesmo de não
+  haver problema algum a relatar — que é a resposta certa para quem não
+  responde por essa área.
+*/
 create or replace function conferir_atendimentos()
 returns table (problema text, quantidade bigint, exemplo text)
 language sql security definer set search_path = public stable as $fn$
   select 'Atendimento concluido sem receita'::text, count(*), min(a.protocolo)
   from agendamentos a
-  where a.situacao = 'concluido' and a.preco - a.desconto > 0
+  where (select equipe_com_acesso_completo())
+    and a.situacao = 'concluido' and a.preco - a.desconto > 0
     and not exists (select 1 from lancamentos l where l.agendamento_id = a.id)
   having count(*) > 0
 
@@ -286,26 +305,30 @@ language sql security definer set search_path = public stable as $fn$
   select 'Receita sem atendimento concluido', count(*), min(l.descricao)
   from lancamentos l
   join agendamentos a on a.id = l.agendamento_id
-  where l.tipo = 'receita' and a.situacao <> 'concluido'
+  where (select equipe_com_acesso_completo())
+    and l.tipo = 'receita' and a.situacao <> 'concluido'
   having count(*) > 0
 
   union all
   select 'Pontos sem atendimento concluido', count(*), min(p.id)
   from pontos p
   join agendamentos a on a.id = p.agendamento_id
-  where a.situacao <> 'concluido'
+  where (select equipe_com_acesso_completo())
+    and a.situacao <> 'concluido'
   having count(*) > 0
 
   union all
   select 'Movimento de caixa sem atendimento concluido', count(*), min(m.descricao)
   from movimentos_caixa m
   join agendamentos a on a.id = m.agendamento_id
-  where a.situacao <> 'concluido'
+  where (select equipe_com_acesso_completo())
+    and a.situacao <> 'concluido'
   having count(*) > 0
 
   union all
   select 'Produto com saldo negativo', count(*), min(nome)
-  from produtos where quantidade < 0
+  from produtos
+  where (select equipe_com_acesso_completo()) and quantidade < 0
   having count(*) > 0;
 $fn$;
 

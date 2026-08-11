@@ -159,6 +159,40 @@ language sql security definer set search_path = public, auth stable as $fn$
   limit 1;
 $fn$;
 
+-- ---------------------------------------------------------------------
+-- 3b. Acesso restrito à agenda
+-- ---------------------------------------------------------------------
+-- Mora aqui, e não no 10-acesso-agenda.sql, por ordem de execução: as
+-- funções privilegiadas dos arquivos 04 a 09 precisam desta checagem, e
+-- todas elas rodam ANTES do 10. Definir lá deixaria metade do sistema
+-- referenciando uma função que ainda não existe.
+--
+-- `equipe_com_acesso_completo()` existe separada de `equipe_autorizada()`
+-- por um motivo que a segunda auditoria encontrou do jeito difícil:
+--
+--   Meia dúzia de funções `security definer` perguntavam apenas
+--   \"está na casa?\" — e passar por cima do RLS é exatamente o que
+--   `security definer` faz. Uma conta de acesso restrito respondia
+--   \"sim\" e recebia, por RPC, tudo o que as políticas do banco
+--   acabavam de negar. A restrição de tela e de tabela existia; a de
+--   função, não.
+--
+-- Toda função que lê ou escreve fora da agenda passa a perguntar esta,
+-- não aquela.
+create or replace function equipe_com_acesso_completo() returns boolean
+language sql security definer set search_path = public, auth stable as $fn$
+  select exists (
+    select 1 from contas_equipe c
+    where c.usuario_id = auth.uid() and c.ativo and c.papel <> 'agenda'
+  );
+$fn$;
+
+comment on function equipe_com_acesso_completo() is
+  'Esta na casa E nao e conta de acesso restrito a agenda.';
+
+revoke all on function equipe_com_acesso_completo() from public;
+grant execute on function equipe_com_acesso_completo() to authenticated;
+
 revoke all on function equipe_autorizada() from public;
 revoke all on function papel_da_conta()    from public;
 grant execute on function equipe_autorizada() to authenticated;

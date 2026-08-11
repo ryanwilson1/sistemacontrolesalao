@@ -114,7 +114,22 @@ returns table (
   checkin_ativo boolean, recado_do_portal text, fuso text,
   nome_fantasia text, descricao text, slogan text, email text,
   facebook text, site text, logo_url text, capa_url text,
-  cor_principal text, cor_secundaria text
+  cor_principal text, cor_secundaria text,
+  /*
+    `limite_diario` também aqui — e é este arquivo que decide.
+
+    A correção do teto diário entrou no 03-portal.sql, mas ESTA função
+    roda depois e faz `drop function` antes de recriar. O resultado era
+    a correção ser desfeita em silêncio: o 03 devolvia o limite, o 07
+    apagava a função e criava outra sem ele, e o link público voltava a
+    aceitar agendamento acima do teto.
+
+    Duas definições da mesma função em arquivos diferentes é uma
+    armadilha, e esta foi a primeira vez que ela disparou. Enquanto as
+    duas existirem, TODA coluna nova precisa entrar nas duas — e a que
+    vale é sempre a do arquivo de número maior.
+  */
+  limite_diario integer
 )
 language sql security definer set search_path = public stable as $fn$
   select s.id, s.nome, s.identificador, s.telefone, s.whatsapp,
@@ -126,7 +141,8 @@ language sql security definer set search_path = public stable as $fn$
          s.checkin_ativo, s.recado_do_portal, s.fuso,
          s.nome_fantasia, s.descricao, s.slogan, s.email,
          s.facebook, s.site, s.logo_url, s.capa_url,
-         s.cor_principal, s.cor_secundaria
+         s.cor_principal, s.cor_secundaria,
+         s.limite_diario
   from studio s
   where p_identificador is null or s.identificador = p_identificador
   limit 1;
@@ -179,8 +195,10 @@ begin
   execute $pol$drop policy if exists "so a equipe troca a marca" on storage.objects$pol$;
   execute $pol$create policy "so a equipe troca a marca" on storage.objects
             for all to authenticated
-            using (bucket_id = 'identidade' and (select equipe_autorizada()))
-            with check (bucket_id = 'identidade' and (select equipe_autorizada()))$pol$;
+            -- Trocar a marca do salão é ajuste de identidade, não de
+            -- agenda. Acesso restrito não mexe no logo de ninguém.
+            using (bucket_id = 'identidade' and (select equipe_com_acesso_completo()))
+            with check (bucket_id = 'identidade' and (select equipe_com_acesso_completo()))$pol$;
 
   raise notice 'Bucket identidade pronto.';
 end $$;
