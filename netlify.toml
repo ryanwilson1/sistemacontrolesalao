@@ -24,11 +24,18 @@
 # `connect-src` precisa listar o Supabase explicitamente. Com apenas
 # 'self' — como estava — o navegador bloqueia toda chamada ao banco e ao
 # Realtime, e o sistema abre bonito sem conseguir carregar nada.
+#
+# `img-src` precisa do Supabase pelo mesmo motivo, e a falta dele passou
+# despercebida por mais tempo: a logo e a capa do salão vivem no Storage,
+# e o navegador as recusava em silêncio. O efeito pior não era em
+# Ajustes — era no LINK PÚBLICO, onde o cabeçalho do portal mostra a
+# marca da cliente. A página abria sem logo e sem capa, e nada no
+# console de quem usa explicava o motivo.
 # ---------------------------------------------------------------------
 [[headers]]
   for = "/*"
   [headers.values]
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
     X-Content-Type-Options = "nosniff"
     X-Frame-Options = "DENY"
     Referrer-Policy = "strict-origin-when-cross-origin"
