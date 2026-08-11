@@ -137,7 +137,22 @@ export class CanalSupabase implements CanalTempoReal {
   publicar(): void {}
 
   inscrever(ouvinte: OuvinteTempoReal): () => void {
-    this.iniciar()
+    /*
+      Inscrever NÃO abre o canal.
+
+      Abria — `this.iniciar()` ficava nesta linha — e o efeito era pior
+      do lado de fora do painel: `useTempoReal` é montado na raiz de
+      TODAS as rotas, inclusive `/agendar/:identificador`. Ou seja, cada
+      visitante do link do Instagram abria um WebSocket com o Supabase.
+
+      Aquele canal não recebia nada: o RLS não entrega evento para
+      `anon`. Era conexão aberta, bateria de celular gasta e uma vaga
+      ocupada no projeto, em troca de zero.
+
+      Quem manda abrir e fechar é o `SessaoContext`, seguindo o estado
+      real da autenticação. É o que o comentário de `iniciar()` já
+      dizia; esta linha o contradizia em silêncio.
+    */
     this.ouvintes.add(ouvinte)
     return () => {
       this.ouvintes.delete(ouvinte)
@@ -149,13 +164,43 @@ export class CanalSupabase implements CanalTempoReal {
       window.clearTimeout(this.reconexao)
       this.reconexao = null
     }
-    void this.canal?.unsubscribe()
-    this.canal = null
+    this.descartarCanal()
     this.ouvintes.clear()
     this.tentativas = 0
   }
 
   /* ---------------------------------------------------------------- */
+
+  /**
+   * Desfaz o canal de verdade.
+   *
+   * ---------------------------------------------------------------
+   * O vazamento que isto corrige
+   * ---------------------------------------------------------------
+   * `unsubscribe()` encerra a escuta, mas o canal **continua na lista
+   * interna do cliente Supabase**. Só `removeChannel()` o tira de lá.
+   *
+   * Enquanto era só `unsubscribe`, cada reconexão deixava um canal
+   * órfão para trás — e reconexão não é evento raro num celular:
+   * acontece ao trocar de Wi-Fi para 4G, ao sair da área de cobertura,
+   * e **toda vez que a tela apaga e acende**, porque o navegador
+   * suspende o WebSocket.
+   *
+   * Num dia de trabalho com o aplicativo aberto, são dezenas. Cada um
+   * guardando referência ao callback, que segura o resto. O aplicativo
+   * ia ficando pesado ao longo do dia e voltava ao normal ao ser
+   * fechado — exatamente o que a proprietária relatou.
+   */
+  private descartarCanal(): void {
+    if (!this.canal) return
+
+    const anterior = this.canal
+    this.canal = null
+
+    // Ordem importa: `removeChannel` já faz o unsubscribe por dentro,
+    // e chamar os dois em sequência inverte o estado interno.
+    void supabase().removeChannel(anterior)
+  }
 
   /**
    * Volta a tentar, com espera crescente.
@@ -167,13 +212,21 @@ export class CanalSupabase implements CanalTempoReal {
   private reconectar(): void {
     if (this.reconexao !== null) return
 
+    /*
+      O canal morto sai AGORA, não na hora de criar o novo.
+
+      Guardá-lo durante a espera — que pode chegar a trinta segundos —
+      mantinha um canal defunto registrado no cliente todo esse tempo.
+      Com reconexões seguidas (celular oscilando entre antenas), a fila
+      de defuntos crescia mais rápido do que a reconexão dava conta.
+    */
+    this.descartarCanal()
+
     this.tentativas += 1
     const espera = Math.min(1000 * 2 ** Math.min(this.tentativas, 5), 30_000)
 
     this.reconexao = window.setTimeout(() => {
       this.reconexao = null
-      void this.canal?.unsubscribe()
-      this.canal = null
       this.iniciar()
     }, espera)
   }
