@@ -125,7 +125,21 @@ const rodar = async () => {
     preco: 100, ativo: true, noLinkPublico: true, profissionaisIds: [],
   } as never
 
-  const terca = new Date('2026-08-11T12:00:00')
+  /*
+    A data é calculada, não digitada.
+
+    A versão anterior fixava '2026-08-11' — que era \"a próxima terça\"
+    no dia em que o teste foi escrito e virou o dia de hoje algumas
+    semanas depois. A partir dali o teste passava de manhã e falhava à
+    tarde: o motor descarta horário já vencido, e às 17h de hoje não
+    existe mais nenhum horário de hoje.
+
+    Falha que depende da hora do relógio é pior do que falha nenhuma —
+    ensina a equipe a ignorar o vermelho. Uma terça no futuro mantém a
+    intenção do teste (grade de um dia útil comum) sem prazo de
+    validade.
+  */
+  const terca = proximaTerca()
   const jornada = {
     diaSemana: 2, aberto: true, abre: '09:00', fecha: '18:00',
     almocoInicio: '12:00', almocoFim: '13:00',
@@ -262,3 +276,11 @@ const rodar = async () => {
 }
 
 void rodar()
+
+/** A próxima terça-feira ao meio-dia. Sempre no futuro — ver FLUXO 4. */
+function proximaTerca(): Date {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  d.setDate(d.getDate() + ((2 - d.getDay() + 7) % 7 || 7))
+  return d
+}
