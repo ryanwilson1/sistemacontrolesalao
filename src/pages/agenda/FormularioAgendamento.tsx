@@ -67,7 +67,14 @@ export function FormularioAgendamento(props: Props) {
               recusaria de qualquer forma, e um botão que só existe
               para dar erro é pior do que botão nenhum.
             */}
-            {formulario.editando && agendamento && agendamento.situacao !== 'concluido' && (
+            {/*
+              Aparece também no concluído — a condição que o escondia
+              vinha da regra antiga, que recusava excluir atendimento
+              concluído. Agora existe o estorno transacional, então o
+              caminho existe; o que muda é o texto da confirmação, que
+              precisa dizer o que mais será desfeito junto.
+            */}
+            {formulario.editando && agendamento && (
               <Botao
                 variante="perigo"
                 className="mr-auto"
@@ -242,12 +249,28 @@ export function FormularioAgendamento(props: Props) {
         precisa saber é que isto não é cancelar — que o registro some
         do histórico em vez de ficar marcado como cancelado.
       */}
+      {/*
+        Dois textos, porque são duas operações de peso muito diferente.
+
+        Excluir um agendamento comum tira uma linha da agenda. Excluir
+        um CONCLUÍDO desfaz receita, caixa, pontos, estoque e a ficha de
+        evolução — e quem confirma precisa saber disso ANTES, não
+        descobrir depois que o faturamento do mês mudou.
+      */}
       <Confirmar
         aberto={formulario.confirmandoExclusao}
         aoFechar={() => formulario.setConfirmandoExclusao(false)}
         aoConfirmar={() => void formulario.excluir()}
-        titulo="Deseja realmente excluir este agendamento?"
-        descricao="O registro será apagado e não aparecerá no histórico da cliente. Para desmarcar guardando o registro, use Cancelar."
+        titulo={
+          agendamento?.situacao === 'concluido'
+            ? 'Excluir este atendimento e desfazer tudo que ele gerou?'
+            : 'Deseja realmente excluir este agendamento?'
+        }
+        descricao={
+          agendamento?.situacao === 'concluido'
+            ? 'Serão desfeitos junto: a receita, a entrada no caixa, os pontos de fidelidade, o consumo de produtos e a ficha de evolução da cliente. Use isto para corrigir um registro de teste ou concluído por engano.'
+            : 'O registro será apagado e não aparecerá no histórico da cliente. Para desmarcar guardando o registro, use Cancelar.'
+        }
         rotuloConfirmar="Excluir definitivamente"
         destrutivo
         carregando={formulario.excluindo}

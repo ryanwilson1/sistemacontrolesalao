@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "verificar": "tsc --noEmit",
-    "testar": "TZ=America/Sao_Paulo tsx testes/motor-de-horarios.ts && tsx testes/qrcode.ts && tsx testes/contraste.ts && tsx testes/imagens.ts && tsx testes/persistencia.ts && tsx testes/fidelidade.ts && tsx testes/restauracao.ts && tsx testes/fluxos-reais.ts && tsx testes/moeda.ts && tsx testes/caixa.ts && tsx testes/esquema-caixa.ts && tsx testes/corrida-escrita-leitura.ts && tsx testes/rpc-postgres-real.ts && tsx testes/migracao-postgres-real.ts && tsx testes/concorrencia-postgres-real.ts && TZ=America/Sao_Paulo tsx testes/segunda-varredura.ts && TZ=America/Sao_Paulo tsx testes/degradacao.ts"
+    "testar": "TZ=America/Sao_Paulo tsx testes/motor-de-horarios.ts && tsx testes/qrcode.ts && tsx testes/contraste.ts && tsx testes/imagens.ts && tsx testes/persistencia.ts && tsx testes/fidelidade.ts && tsx testes/restauracao.ts && tsx testes/fluxos-reais.ts && tsx testes/moeda.ts && tsx testes/caixa.ts && tsx testes/esquema-caixa.ts && tsx testes/corrida-escrita-leitura.ts && tsx testes/rpc-postgres-real.ts && tsx testes/migracao-postgres-real.ts && tsx testes/concorrencia-postgres-real.ts && tsx testes/estorno-postgres-real.ts && TZ=America/Sao_Paulo tsx testes/segunda-varredura.ts && TZ=America/Sao_Paulo tsx testes/degradacao.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { ErroDeRegra } from '@/utils/erros'
+import { comPrazo, MENSAGEM_GRAVACAO_INCERTA, PRAZO_GRAVACAO_MS } from '../rede'
 
 /**
  * O cliente do Supabase.
@@ -66,7 +67,23 @@ export function supabase(): SupabaseClient {
 export async function chamarPortal<T>(
   funcao: string, parametros: Record<string, unknown> = {},
 ): Promise<T> {
-  const { data, error } = await supabase().rpc(funcao, parametros)
+  /*
+    Prazo aqui também, e não só nas leituras/gravações do adaptador.
+
+    Este é o caminho de `concluir_atendimento`, `estornar_atendimento`
+    e de todas as funções do portal — as operações mais pesadas do
+    sistema, justamente as que mais demoram numa rede ruim. Sem prazo,
+    a promessa ficava pendurada e a tela em "salvando" para sempre.
+
+    O prazo de GRAVAÇÃO porque toda função aqui escreve: a mensagem de
+    tempo esgotado diz "não conseguimos confirmar", nunca "não foi
+    salvo" — a operação pode ter chegado.
+  */
+  const { data, error } = await comPrazo(
+    async () => supabase().rpc(funcao, parametros),
+    PRAZO_GRAVACAO_MS,
+    MENSAGEM_GRAVACAO_INCERTA,
+  )
 
   if (error) {
     /*
