@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, MessageCircle, Plus, Search, Users } from 'lucide-react'
+import { Archive, ChevronLeft, ChevronRight, MessageCircle, Plus, Search, Users } from 'lucide-react'
 import { CabecalhoPagina } from '@/components/common'
 import { Botao, Carta, Entrada, Retrato } from '@/components/ui'
 import { EstadoErro, EstadoVazio, EsqueletoLista } from '@/components/feedback'
@@ -15,13 +15,15 @@ export default function Clientes() {
   const [busca, setBusca] = useState('')
   const [pagina, setPagina] = useState(0)
   const [criando, setCriando] = useState(false)
+  const [verArquivadas, setVerArquivadas] = useState(false)
 
   const termo = useDebounce(busca)
 
-  // Trocar o termo volta para a primeira página — senão a lista some.
-  useEffect(() => setPagina(0), [termo])
+  // Trocar o termo ou a lista volta para a primeira página — senão a
+  // lista some: a página 3 das ativas pode não existir nas arquivadas.
+  useEffect(() => setPagina(0), [termo, verArquivadas])
 
-  const { dados, carregando, erro, recarregar } = useClientes(termo, pagina)
+  const { dados, carregando, erro, recarregar } = useClientes(termo, pagina, verArquivadas)
   const totalPaginas = Math.ceil((dados?.total ?? 0) / PAGINACAO.clientesPorPagina)
 
   return (
@@ -39,7 +41,7 @@ export default function Clientes() {
         }
       />
 
-      <div className="mb-4 max-w-md">
+      <div className="mb-4 flex max-w-md flex-col gap-2">
         <Entrada
           type="search"
           value={busca}
@@ -47,6 +49,21 @@ export default function Clientes() {
           placeholder="Buscar por nome ou telefone"
           prefixo={<Search className="h-4 w-4" />}
         />
+
+        {/*
+          O acesso às arquivadas fica discreto e sempre presente.
+
+          Escondê-lo atrás de um menu faria a proprietária arquivar uma
+          cliente por engano e não ter como desfazer — o caminho de
+          volta precisa ser tão visível quanto o de ida.
+        */}
+        <button
+          onClick={() => setVerArquivadas((v) => !v)}
+          className="inline-flex w-fit items-center gap-1.5 rounded-lg px-1 py-1 text-[12.5px] font-medium text-onix-400 transition-colors hover:text-onix-800"
+        >
+          <Archive className="h-3.5 w-3.5" />
+          {verArquivadas ? 'Ver clientes ativas' : 'Ver clientes arquivadas'}
+        </button>
       </div>
 
       {erro ? (

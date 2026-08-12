@@ -92,6 +92,27 @@ export function Importar() {
         responsavelId: sessao?.profissionalId,
       })
       aviso.sucesso('Dados restaurados', `${resultado.restaurados} registros.`)
+
+      /*
+        O estado híbrido é dito na cara, não escondido no histórico.
+
+        Um arquivo sem determinada coleção NÃO a apaga — o que já
+        estava fica. Isso pode ser exatamente o que a pessoa quer (um
+        backup só de clientes) ou uma surpresa (um backup velho que ela
+        achava completo). A diferença entre os dois é ela SABER.
+      */
+      if (resultado.ausentes.length > 0) {
+        aviso.info(
+          'Algumas coleções não vieram no arquivo',
+          `Mantidas como estavam: ${resultado.ausentes.join(', ')}.`,
+        )
+      }
+      if (resultado.desconhecidas.length > 0) {
+        aviso.info(
+          'O arquivo trouxe dados que este sistema não reconhece',
+          `Ignorados: ${resultado.desconhecidas.join(', ')}.`,
+        )
+      }
       setConfirmandoRestauracao(false)
       cache.limpar()
     } catch (falha) {

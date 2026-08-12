@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { formatarMoedaBR, moedaOuZero } from '@/utils/moeda'
+import { novoId } from '@/utils/id'
 import { useAviso } from '@/contexts'
 import {
   useAgendar, useAtendentes, useDebounce, useHorariosLivres, useInteressadasNaVaga,
-  useMudarSituacao, useRemarcar, useSalvarCliente, useServicos, useSugerirClientes,
+  useExcluirAgendamento, useMudarSituacao, useRemarcar, useSalvarCliente, useServicos,
+  useSugerirClientes,
 } from '@/hooks'
 import { clientesRepo } from '@/services'
 import { digitos } from '@/utils/formato'
@@ -45,6 +47,16 @@ export function usarFormularioDeAgendamento({
   const agendar = useAgendar()
   const remarcar = useRemarcar()
   const mudarSituacao = useMudarSituacao()
+  const excluirAgendamento = useExcluirAgendamento()
+
+  /*
+    O id da gravação nasce no primeiro toque em salvar e sobrevive à
+    tentativa seguinte — é a metade do formulário no contrato de
+    idempotência (ver `agendar` no repositório). Timeout + retry =
+    mesmo id = chave primária ocupada = confirmação, nunca duplicata.
+    Zera no sucesso: o próximo envio é outra operação.
+  */
+  const idDoEnvio = useRef<string | null>(null)
   const salvarCliente = useSalvarCliente()
 
   const editando = !!agendamento
@@ -63,6 +75,7 @@ export function usarFormularioDeAgendamento({
   const [desconto, setDesconto] = useState('')
   const [observacao, setObservacao] = useState('')
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false)
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false)
   const [vagaAberta, setVagaAberta] = useState<AgendamentoDetalhado | null>(null)
 
   /**
@@ -193,7 +206,10 @@ export function usarFormularioDeAgendamento({
           mudancas: { ...comum, servicoId, profissionalId, inicio: inicio.toISOString(), clienteId },
         })
       } else {
+        idDoEnvio.current ??= novoId()
+
         await agendar.executar({
+          idIdempotencia: idDoEnvio.current,
           ...comum,
           clienteId,
           servicoId,
@@ -204,6 +220,7 @@ export function usarFormularioDeAgendamento({
         })
       }
 
+      idDoEnvio.current = null
       aviso.sucesso(
         editando ? 'Agendamento atualizado' : 'Agendamento criado',
         `${dataRelativa(inicio)} às ${horario}`,
@@ -233,6 +250,29 @@ export function usarFormularioDeAgendamento({
       aoFechar()
     } catch (falha) {
       aviso.erro('Não foi possível atualizar', mensagemDeErro(falha))
+    }
+  }
+
+  /**
+   * Apaga o agendamento de vez.
+   *
+   * O diálogo fecha ANTES de o modal fechar, e nessa ordem: o
+   * `Confirmar` vive por cima do `Modal`, e deixar os dois saírem
+   * juntos fazia a animação de saída do primeiro rodar sobre um pai
+   * que já não existia — o overlay ficava alguns quadros na tela,
+   * interceptando o toque seguinte.
+   */
+  const excluir = async () => {
+    if (!agendamento) return
+
+    try {
+      await excluirAgendamento.executar(agendamento.id)
+      setConfirmandoExclusao(false)
+      aviso.sucesso('Agendamento excluído', 'O horário voltou a ficar livre na agenda.')
+      aoFechar()
+    } catch (falha) {
+      setConfirmandoExclusao(false)
+      aviso.erro('Não foi possível excluir', mensagemDeErro(falha))
     }
   }
 
@@ -273,10 +313,12 @@ export function usarFormularioDeAgendamento({
 
     /* fluxo de cancelamento e lista de espera */
     confirmandoCancelamento, setConfirmandoCancelamento,
+    confirmandoExclusao, setConfirmandoExclusao,
     vagaAberta, fecharAviso,
 
     /* ações */
-    enviar, alterarSituacao,
+    enviar, alterarSituacao, excluir,
     salvando, mudandoSituacao: mudarSituacao.salvando,
+    excluindo: excluirAgendamento.salvando,
   }
 }

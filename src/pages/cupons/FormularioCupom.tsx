@@ -95,7 +95,13 @@ export function FormularioCupom({
   /** Exemplo com um atendimento de R$ 200, para a regra ficar tangível. */
   const exemplo = () => {
     const base = 200
-    const bruto = tipo === 'percentual' ? (base * Number(valor || 0)) / 100 : Number(valor || 0)
+    /*
+      `moedaOuZero`, não `Number`: o campo guarda "10,50" e
+      `Number("10,50")` é NaN — a prévia mostrava "R$ NaN" justamente
+      quando o valor tinha centavos. A gravação sempre usou o parser
+      certo; só esta prévia divergia.
+    */
+    const bruto = tipo === 'percentual' ? (base * moedaOuZero(valor)) / 100 : moedaOuZero(valor)
     const teto = moedaOuZero(descontoMaximo) > 0 ? Math.min(bruto, moedaOuZero(descontoMaximo)) : bruto
     const desconto = Math.min(teto, base)
     return `Em um atendimento de ${dinheiro(base)}, desconta ${dinheiro(desconto)} — fica ${dinheiro(base - desconto)}.`

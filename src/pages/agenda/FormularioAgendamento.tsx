@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Trash2 } from 'lucide-react'
 import { AreaTexto, Botao, Campo, CampoMoeda, Entrada, Modal, Selecao } from '@/components/ui'
 import { Confirmar } from '@/components/feedback'
 import { useSessao } from '@/contexts'
@@ -31,6 +32,20 @@ export function FormularioAgendamento(props: Props) {
     <>
       <Modal
         aberto={aberto}
+        /*
+          A guarda de alterações não salvas — o Modal a implementa, mas
+          só age quando recebe o estado para comparar. Este formulário
+          era o único importante sem ela: meia progressiva digitada e um
+          toque fora do painel jogavam tudo fora sem uma pergunta.
+        */
+        estadoDoFormulario={{
+          clienteId: formulario.cliente?.id ?? null,
+          novoNome: formulario.novoNome, novoFone: formulario.novoFone,
+          servicoId: formulario.servicoId, profissionalId: formulario.profissionalId,
+          data: formulario.data, horario: formulario.horario,
+          preco: formulario.preco, desconto: formulario.desconto,
+          observacao: formulario.observacao,
+        }}
         aoFechar={aoFechar}
         titulo={formulario.editando ? 'Agendamento' : 'Novo agendamento'}
         descricao={
@@ -40,6 +55,27 @@ export function FormularioAgendamento(props: Props) {
         }
         rodape={
           <>
+            {/*
+              Excluir mora à esquerda, longe de Salvar.
+
+              As duas ações têm efeitos opostos e o dedo no celular não
+              tem a precisão do ponteiro. `mr-auto` empurra uma para
+              cada canto — é a única separação que sobrevive à tela
+              estreita, onde o rodapé não cabe em linha.
+
+              Some no agendamento concluído: ali a regra do repositório
+              recusaria de qualquer forma, e um botão que só existe
+              para dar erro é pior do que botão nenhum.
+            */}
+            {formulario.editando && agendamento && agendamento.situacao !== 'concluido' && (
+              <Botao
+                variante="perigo"
+                className="mr-auto"
+                onClick={() => formulario.setConfirmandoExclusao(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Excluir
+              </Botao>
+            )}
             <Botao variante="fantasma" onClick={aoFechar}>Fechar</Botao>
             <Botao variante="ouro" onClick={() => void formulario.enviar()} carregando={formulario.salvando}>
               {formulario.editando ? 'Salvar alterações' : 'Confirmar agendamento'}
@@ -181,7 +217,7 @@ export function FormularioAgendamento(props: Props) {
               onClick={aoFechar}
               className="inline-block text-[13px] font-medium text-onix-600 underline decoration-marca decoration-2 underline-offset-4"
             >
-              Abrir ficha completa da formulario.cliente
+              Abrir ficha completa da cliente
             </Link>
           )}
         </div>
@@ -192,10 +228,29 @@ export function FormularioAgendamento(props: Props) {
         aoFechar={() => formulario.setConfirmandoCancelamento(false)}
         aoConfirmar={() => void formulario.alterarSituacao('cancelado')}
         titulo="Cancelar este agendamento?"
-        descricao="O horário volta a ficar livre para outras clientes. A ficha da formulario.cliente guarda o registro."
+        descricao="O horário volta a ficar livre para outras clientes. A ficha da cliente guarda o registro."
         rotuloConfirmar="Cancelar agendamento"
         destrutivo
         carregando={formulario.mudandoSituacao}
+      />
+
+      {/*
+        A confirmação diz o que se perde, não apenas "tem certeza?".
+
+        "Deseja realmente excluir?" não ajuda ninguém a decidir: quem
+        chegou até aqui já sabe que pediu para excluir. O que ela
+        precisa saber é que isto não é cancelar — que o registro some
+        do histórico em vez de ficar marcado como cancelado.
+      */}
+      <Confirmar
+        aberto={formulario.confirmandoExclusao}
+        aoFechar={() => formulario.setConfirmandoExclusao(false)}
+        aoConfirmar={() => void formulario.excluir()}
+        titulo="Deseja realmente excluir este agendamento?"
+        descricao="O registro será apagado e não aparecerá no histórico da cliente. Para desmarcar guardando o registro, use Cancelar."
+        rotuloConfirmar="Excluir definitivamente"
+        destrutivo
+        carregando={formulario.excluindo}
       />
 
       <AvisarListaDeEspera

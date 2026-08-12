@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Cake, MessageCircle, Pencil } from 'lucide-react'
+import { Archive, ArrowLeft, Cake, MessageCircle, Pencil, RotateCcw } from 'lucide-react'
 import { Botao, Carta, Etiqueta, Retrato } from '@/components/ui'
-import { CarregandoTela, EstadoErro } from '@/components/feedback'
-import { useCliente, useHistoricoDoCliente } from '@/hooks'
+import { CarregandoTela, Confirmar, EstadoErro } from '@/components/feedback'
+import { useArquivarCliente, useCliente, useHistoricoDoCliente, useReativarCliente } from '@/hooks'
 import { MENSAGENS } from '@/components/common'
+import { useAviso } from '@/contexts'
+import { mensagemDeErro } from '@/utils/erros'
 import { ROTAS } from '@/constants'
 import { linkWhatsApp, telefone } from '@/utils/formato'
 import { dataCurta } from '@/utils/datas'
@@ -18,6 +20,11 @@ export default function FichaCliente() {
   const { id } = useParams<{ id: string }>()
   const navegar = useNavigate()
   const [editando, setEditando] = useState(false)
+  const [confirmandoArquivo, setConfirmandoArquivo] = useState(false)
+
+  const aviso = useAviso()
+  const arquivar = useArquivarCliente()
+  const reativar = useReativarCliente()
 
   const { dados, carregando, erro, recarregar } = useCliente(id)
   const { dados: historico, carregando: carregandoHistorico } = useHistoricoDoCliente(id)
@@ -50,6 +57,41 @@ export default function FichaCliente() {
         new Date(a.inicio).getTime() > Date.now() &&
         ['pendente', 'confirmado'].includes(a.situacao),
     )
+
+  /**
+   * Arquivar em vez de apagar.
+   *
+   * A ficha carrega o histórico de atendimentos, os pontos e as fotos
+   * de evolução. Apagá-la levaria tudo isso junto — e as entradas de
+   * caixa daquela cliente ficariam sem dono no fechamento do mês.
+   *
+   * Depois de arquivar, volta para a lista: ficar na ficha de alguém
+   * que acabou de sumir da lista principal é confuso, e a proprietária
+   * arquivou justamente porque terminou com aquele cadastro.
+   */
+  const confirmarArquivo = async () => {
+    try {
+      await arquivar.executar(cliente.id)
+      setConfirmandoArquivo(false)
+      aviso.sucesso(
+        'Cliente arquivada',
+        'Ela saiu da lista principal. O histórico continua guardado.',
+      )
+      navegar(ROTAS.clientes)
+    } catch (falha) {
+      setConfirmandoArquivo(false)
+      aviso.erro('Não foi possível arquivar', mensagemDeErro(falha))
+    }
+  }
+
+  const desarquivar = async () => {
+    try {
+      await reativar.executar(cliente.id)
+      aviso.sucesso('Cliente reativada', 'Ela voltou para a lista principal.')
+    } catch (falha) {
+      aviso.erro('Não foi possível reativar', mensagemDeErro(falha))
+    }
+  }
 
   return (
     <>
@@ -114,6 +156,32 @@ export default function FichaCliente() {
             <Botao variante="secundario" onClick={() => setEditando(true)} className="flex-1 sm:flex-none">
               <Pencil className="h-3.5 w-3.5" /> Editar
             </Botao>
+
+            {/*
+              Arquivar aparece para quem está ativa; reativar, para quem
+              não está. Um botão só, trocando de papel — dois lado a
+              lado obrigariam a proprietária a ler qual está válido
+              agora, e um deles estaria sempre desabilitado sem motivo
+              visível.
+            */}
+            {cliente.ativo ? (
+              <Botao
+                variante="fantasma"
+                onClick={() => setConfirmandoArquivo(true)}
+                className="flex-1 sm:flex-none"
+              >
+                <Archive className="h-3.5 w-3.5" /> Arquivar
+              </Botao>
+            ) : (
+              <Botao
+                variante="secundario"
+                onClick={() => void desarquivar()}
+                carregando={reativar.salvando}
+                className="flex-1 sm:flex-none"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Reativar
+              </Botao>
+            )}
           </div>
         </div>
       </Carta>
@@ -135,6 +203,23 @@ export default function FichaCliente() {
         aberto={editando}
         aoFechar={() => setEditando(false)}
         cliente={cliente}
+      />
+
+      {/*
+        O texto é o que a proprietária precisa saber para decidir, e é
+        literalmente o que foi pedido: arquivar não é apagar. Dizer só
+        "tem certeza?" faria ela hesitar e desistir de usar o recurso —
+        que foi o que aconteceu enquanto o botão não existia e a única
+        saída aparente era apagar a ficha.
+      */}
+      <Confirmar
+        aberto={confirmandoArquivo}
+        aoFechar={() => setConfirmandoArquivo(false)}
+        aoConfirmar={() => void confirmarArquivo()}
+        titulo="Arquivar esta cliente?"
+        descricao="Esta cliente deixará de aparecer na lista principal, mas seu histórico será preservado. Você pode reativá-la a qualquer momento."
+        rotuloConfirmar="Arquivar"
+        carregando={arquivar.salvando}
       />
     </>
   )

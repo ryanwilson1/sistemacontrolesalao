@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { moedaOuZero } from '@/utils/moeda'
 import { Wallet } from 'lucide-react'
 import { CampoMoeda, Botao, Campo, Carta, Entrada } from '@/components/ui'
@@ -6,12 +6,28 @@ import { useAviso, useSessao } from '@/contexts'
 import { useAbrirCaixa } from '@/hooks'
 import { dataLonga } from '@/utils/datas'
 import { mensagemDeErro } from '@/utils/erros'
+import { novoId } from '@/utils/id'
 
 /** Tela de abertura: o único dado que importa é o troco inicial. */
 export function AbrirCaixa({ aoAbrir }: { aoAbrir: () => void }) {
   const abrir = useAbrirCaixa()
   const { sessao } = useSessao()
   const aviso = useAviso()
+
+  /*
+    O id da gravação nasce AQUI, no primeiro toque em salvar — e
+    sobrevive à tentativa seguinte.
+
+    É a metade do formulário no contrato de idempotência: se o servidor
+    gravou mas a resposta se perdeu (timeout), a nova tentativa repete
+    o MESMO id, bate na chave primária, e o adaptador devolve a linha
+    já gravada como sucesso. Uma operação no banco, nunca duas — não
+    importa quantas vezes a pessoa toque.
+
+    Zera no sucesso (o próximo envio é OUTRA operação) e quando o
+    formulário abre de novo.
+  */
+  const idDoEnvio = useRef<string | null>(null)
 
   const [valor, setValor] = useState('0')
   const [observacoes, setObservacoes] = useState('')
@@ -24,11 +40,15 @@ export function AbrirCaixa({ aoAbrir }: { aoAbrir: () => void }) {
   const enviar = async () => {
     if (!sessao) return
     try {
+      idDoEnvio.current ??= novoId()
+
       await abrir.executar({
+        idIdempotencia: idDoEnvio.current,
         valorAbertura: moedaOuZero(valor),
         responsavelId: sessao.profissionalId,
         observacoes: observacoes.trim() || null,
       })
+      idDoEnvio.current = null
       aviso.sucesso('Caixa aberto', 'Agora as entradas e saídas do dia ficam registradas.')
       aoAbrir()
     } catch (falha) {

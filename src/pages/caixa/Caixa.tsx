@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { CabecalhoPagina, Indicador } from '@/components/common'
 import { Botao, Carta, CartaTitulo, Etiqueta } from '@/components/ui'
-import { EstadoVazio, EsqueletoCarta, EsqueletoLista } from '@/components/feedback'
+import { EstadoErro, EstadoVazio, EsqueletoCarta, EsqueletoLista } from '@/components/feedback'
 import {
   useCaixaAberto, useMovimentosDoCaixa, useResumoDoCaixa,
 } from '@/hooks'
@@ -25,7 +25,7 @@ import { CaixaFechado, PorFormaDePagamento } from './componentes/ResumoDoCaixa'
  * estado, em vez de mostrar tudo desativado — menos ruído para quem usa.
  */
 export default function Caixa() {
-  const { dados: caixa, carregando, recarregar } = useCaixaAberto()
+  const { dados: caixa, carregando, erro, recarregar } = useCaixaAberto()
   const { dados: movimentos, carregando: carregandoMovimentos } = useMovimentosDoCaixa(caixa?.id)
   const { dados: resumo } = useResumoDoCaixa(caixa?.id)
 
@@ -39,6 +39,28 @@ export default function Caixa() {
         <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => <EsqueletoCarta key={i} />)}
         </div>
+      </>
+    )
+  }
+
+  /*
+    Leitura falhou ≠ caixa fechado.
+
+    Sem esta distinção, a falha de leitura caía no `!caixa` e a tela
+    oferecia ABRIR o caixa — sobre um estado que o sistema não conhecia.
+    Se já houvesse um aberto, a tentativa levava a mais um erro; a
+    proprietária via duas mensagens contraditórias em sequência e
+    nenhuma explicava nada.
+  */
+  if (erro) {
+    return (
+      <>
+        <CabecalhoPagina sobretitulo="Caixa" titulo="Caixa diário" />
+        <EstadoErro
+          titulo="Não foi possível carregar o caixa"
+          descricao={erro}
+          aoTentarNovamente={recarregar}
+        />
       </>
     )
   }

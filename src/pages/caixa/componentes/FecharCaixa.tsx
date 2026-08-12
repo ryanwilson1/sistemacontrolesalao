@@ -5,6 +5,7 @@ import { useAviso, useSessao } from '@/contexts'
 import { useFecharCaixa } from '@/hooks'
 import { dinheiro } from '@/utils/formato'
 import { mensagemDeErro } from '@/utils/erros'
+import { moedaOuZero } from '@/utils/moeda'
 import { cn } from '@/utils/cn'
 import type { ResumoCaixa } from '@/types'
 
@@ -36,7 +37,24 @@ export function FecharCaixa({
   }, [aberto])
 
   const esperado = resumo?.saldoEsperado ?? 0
-  const informado = Number(contado || 0)
+
+  /*
+    `moedaOuZero`, não `Number`.
+
+    O `CampoMoeda` acima guarda o texto como a pessoa digita — formato
+    brasileiro, com vírgula. `Number("122,50")` é NaN, e o NaN
+    contaminava tudo dali em diante: a diferença exibida virava "NaN",
+    e o fechamento gravava NaN em `valor_informado` — que o Postgres
+    recusa por não ser numérico, com uma mensagem que nada explicava.
+
+    Só valores redondos ("122") passavam batido, o que fazia o bug
+    parecer intermitente: fechava num dia, quebrava no outro, conforme
+    os centavos da gaveta.
+
+    É o mesmo defeito já corrigido no formulário de agendamento; o
+    parser precisa ser um só em todo lugar que lê um `CampoMoeda`.
+  */
+  const informado = moedaOuZero(contado)
   const diferenca = contado === '' ? null : Number((informado - esperado).toFixed(2))
 
   const enviar = async () => {
