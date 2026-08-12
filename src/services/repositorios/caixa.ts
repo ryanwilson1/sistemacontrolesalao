@@ -53,6 +53,8 @@ class RepositorioCaixa extends RepositorioBase<Caixa> {
     valorAbertura: number
     responsavelId: string
     observacoes?: string | null
+    /** Ver `agendar`: retry após timeout reusa o id e vira confirmação. */
+    idIdempotencia?: string
   }): Promise<Caixa> {
     const jaAberto = await this.aberto()
     if (jaAberto) {
@@ -80,7 +82,7 @@ class RepositorioCaixa extends RepositorioBase<Caixa> {
       valorInformado: null,
       diferenca: null,
       observacoes: dados.observacoes ?? null,
-    })
+    }, { id: dados.idIdempotencia })
   }
 
   /** Registra uma entrada ou saída no caixa aberto. */
@@ -90,6 +92,8 @@ class RepositorioCaixa extends RepositorioBase<Caixa> {
     descricao: string
     valor: number
     forma: FormaPagamento
+    /** Ver `agendar`: retry após timeout reusa o id e vira confirmação. */
+    idIdempotencia?: string
     agendamentoId?: string | null
     procedimentoId?: string | null
     profissionalId?: string | null
@@ -110,7 +114,7 @@ class RepositorioCaixa extends RepositorioBase<Caixa> {
       agendamentoId: dados.agendamentoId ?? null,
       procedimentoId: dados.procedimentoId ?? null,
       profissionalId: dados.profissionalId ?? null,
-    })
+    }, { id: dados.idIdempotencia })
   }
 
   /**

@@ -107,8 +107,26 @@ export class CanalSupabase implements CanalTempoReal {
           this.entregar({
             colecao,
             em: new Date().toISOString(),
-            // Sempre remoto: a mudança veio do banco, então o espelho
-            // desta aba está velho mesmo que tenha sido ela a gravar.
+            /*
+              Sempre 'servidor' — e isso é uma DECISÃO, revertendo uma
+              otimização anterior.
+
+              Houve aqui um mecanismo de "eco": a gravação local
+              registrava uma marca e o evento correspondente era
+              assinado como desta aba, preservando o espelho. O
+              problema é estrutural: `postgres_changes` não diz quem
+              gravou, então o pareamento era por COLEÇÃO — e uma
+              mudança de outro aparelho, chegando dentro da janela,
+              podia consumir a marca e ser tratada como local. Dado
+              velho na tela, sem erro e sem rastro.
+
+              Entre uma releitura a mais por gravação e a possibilidade
+              de um aparelho não ver o que o outro fez, fica a
+              releitura. O custo real caiu junto: o espelho agora é
+              atualizado com a LINHA CONFIRMADA pelo banco a cada
+              escrita, então a releitura pós-evento devolve o mesmo
+              estado — é redundância barata, não retrabalho.
+            */
             origem: 'servidor',
           })
         },
@@ -132,9 +150,17 @@ export class CanalSupabase implements CanalTempoReal {
   }
 
   /**
-   * Vazio de propósito. Ver o comentário no topo do arquivo.
+   * Não anuncia nada — quem anuncia é o Postgres, a partir da própria
+   * gravação (ver o topo do arquivo). O que ele NÃO sabe dizer é de
+   * quem foi a gravação, então aqui fica registrado o eco esperado:
+   * quando o evento correspondente voltar, o canal o reconhece como
+   * desta aba e o espelho local é preservado.
    */
-  publicar(): void {}
+  publicar(): void {
+    // Nada a anunciar: quem anuncia é o Postgres, a partir da própria
+    // gravação. Ver o comentário em `entregar` sobre a decisão de
+    // tratar todo evento como remoto.
+  }
 
   inscrever(ouvinte: OuvinteTempoReal): () => void {
     /*

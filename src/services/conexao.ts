@@ -1,4 +1,5 @@
 import { supabase, temSupabase } from './supabase/cliente'
+import { comPrazo, ehFalhaDeRede, ErroDeRede, PRAZO_PADRAO_MS } from './rede'
 
 /**
  * Estado da conexão com o banco.
@@ -6,16 +7,30 @@ import { supabase, temSupabase } from './supabase/cliente'
  * Existe para responder uma pergunta que o sistema não conseguia
  * responder: **o que eu acabei de fazer chegou no servidor?**
  *
- * Sem isto, uma queda de rede se manifesta como um aviso vermelho
- * genérico no meio de um formulário, e a proprietária não tem como
- * distinguir "errei o preenchimento" de "a internet caiu". Pior: ela
- * não sabe se pode fechar a tela.
- *
- * Três estados, e não mais:
+ * Três estados úteis, e não mais:
  *
  *   conectado    o último diálogo com o banco deu certo
  *   sincronizando há uma gravação em andamento
- *   sem_conexao  a última tentativa falhou
+ *   sem_conexao  a última tentativa falhou POR CAUSA DA REDE
+ *
+ * ---------------------------------------------------------------
+ * A correção que este arquivo carrega
+ * ---------------------------------------------------------------
+ * `deuErrado()` era chamado para **toda** gravação que falhasse,
+ * qualquer que fosse o motivo. Uma coluna inexistente no banco, uma
+ * regra de negócio recusada, um telefone duplicado — tudo acendia a
+ * faixa "Não foi possível sincronizar com o servidor".
+ *
+ * E a faixa não apagava sozinha: só uma gravação bem-sucedida ou um
+ * `conferir()` a limpava. Como o Caixa falhava em toda tentativa, a
+ * proprietária via o aviso de rede caída em todas as telas — enquanto a
+ * agenda carregava normalmente na mesma tela. O sistema afirmava duas
+ * coisas contraditórias ao mesmo tempo, e a errada era a mais
+ * chamativa.
+ *
+ * Agora a distinção é explícita: o indicador só reage ao que é
+ * **transporte**. Erro de regra, de permissão ou de esquema pertence à
+ * tela onde a pessoa clicou, que é onde ela pode fazer algo a respeito.
  *
  * O que este módulo NÃO faz é enfileirar gravação para reenviar
  * depois. Seria a coisa mais elegante de escrever e a mais perigosa de
@@ -59,6 +74,9 @@ function anunciar(novo: EstadoConexao): void {
   }
 }
 
+/** Uma conferência em andamento. Impede N chamadas simultâneas ao `pulso`. */
+let conferindo: Promise<boolean> | null = null
+
 export const conexao = {
   atual: (): EstadoConexao => estado,
   ultimaFalha: (): string | null => ultimoErro,
@@ -77,7 +95,7 @@ export const conexao = {
     anunciar('sincronizando')
   },
 
-  /** A gravação terminou bem. */
+  /** A gravação terminou bem. Prova de que o servidor responde. */
   deuCerto(): void {
     if (!temSupabase()) return
     gravacoesEmVoo = Math.max(0, gravacoesEmVoo - 1)
@@ -85,12 +103,30 @@ export const conexao = {
     if (gravacoesEmVoo === 0) anunciar('conectado')
   },
 
-  /** A gravação falhou. */
-  deuErrado(mensagem?: string): void {
+  /**
+   * A gravação falhou.
+   *
+   * `falhaDeRede` decide se o indicador muda. Vem de quem chamou
+   * porque só lá existe o erro original — aqui chegaria uma string, e
+   * classificar por texto é exatamente o tipo de heurística que
+   * confunde "coluna não encontrada" com "servidor não encontrado".
+   */
+  deuErrado(mensagem?: string, falhaDeRede = false): void {
     if (!temSupabase()) return
     gravacoesEmVoo = Math.max(0, gravacoesEmVoo - 1)
     ultimoErro = mensagem ?? null
-    anunciar('sem_conexao')
+
+    if (falhaDeRede) {
+      anunciar('sem_conexao')
+      return
+    }
+
+    /*
+      O servidor respondeu — respondeu "não", mas respondeu. Do ponto
+      de vista do transporte, isto é uma conexão saudável, e insistir
+      no contrário é o que fazia a faixa vermelha morar na tela.
+    */
+    if (gravacoesEmVoo === 0 && estado !== 'sem_conexao') anunciar('conectado')
   },
 
   /**
@@ -102,8 +138,16 @@ export const conexao = {
    * a cada trinta segundos mexe na agenda. Um health check precisa ser
    * observação pura.
    *
-   * Continua sendo uma função do portal, e não uma consulta de tabela,
-   * porque precisa responder também para quem está sem sessão.
+   * ---------------------------------------------------------------
+   * Duas correções aqui
+   * ---------------------------------------------------------------
+   * 1. **Prazo.** Sem ele, um `fetch` pendurado deixava o indicador em
+   *    "verificando" para sempre — e como o botão "Tentar de novo"
+   *    espera esta promessa, ele ficava desabilitado sem fim.
+   *
+   * 2. **Uma por vez.** Dois componentes montavam e cada um disparava
+   *    a própria conferência. Com a remontagem do layout a cada
+   *    navegação, eram duas chamadas por tela aberta.
    */
   async conferir(): Promise<boolean> {
     if (!temSupabase()) {
@@ -111,17 +155,45 @@ export const conexao = {
       return false
     }
 
-    try {
-      const { error } = await supabase().rpc('pulso')
-      if (error) throw new Error(error.message)
-      ultimoErro = null
-      anunciar('conectado')
-      return true
-    } catch (falha) {
-      ultimoErro = falha instanceof Error ? falha.message : null
-      anunciar('sem_conexao')
-      return false
-    }
+    if (conferindo) return conferindo
+
+    conferindo = (async () => {
+      try {
+        const { error } = await comPrazo(
+          async () => supabase().rpc('pulso'),
+          PRAZO_PADRAO_MS,
+          'A verificação de conexão',
+        )
+        if (error) throw new ErroDeRede(error.message)
+
+        ultimoErro = null
+        anunciar('conectado')
+        return true
+      } catch (falha) {
+        ultimoErro = falha instanceof Error ? falha.message : null
+
+        /*
+          Mesmo aqui a classificação vale.
+
+          `pulso` é uma função do banco: ela pode falhar por não existir
+          (migração não rodada) tanto quanto por rede inacessível. A
+          primeira não é problema de conexão — e anunciá-la como tal
+          mandaria a proprietária conferir o Wi-Fi por causa de um
+          arquivo SQL que ninguém executou.
+        */
+        if (ehFalhaDeRede(falha)) {
+          anunciar('sem_conexao')
+          return false
+        }
+
+        anunciar('conectado')
+        return true
+      } finally {
+        conferindo = null
+      }
+    })()
+
+    return conferindo
   },
 }
 
@@ -140,7 +212,10 @@ export async function comAcompanhamento<T>(operacao: () => Promise<T>): Promise<
     conexao.deuCerto()
     return resultado
   } catch (falha) {
-    conexao.deuErrado(falha instanceof Error ? falha.message : undefined)
+    conexao.deuErrado(
+      falha instanceof Error ? falha.message : undefined,
+      ehFalhaDeRede(falha),
+    )
     throw falha
   }
 }
@@ -152,20 +227,62 @@ export async function comAcompanhamento<T>(operacao: () => Promise<T>): Promise<
  * otimista demais para o caso bom (estar numa rede não significa
  * alcançar o Supabase). Por isso `online` não declara vitória: pede
  * uma conferência de verdade.
+ *
+ * ---------------------------------------------------------------
+ * Uma inscrição só, para o sistema inteiro
+ * ---------------------------------------------------------------
+ * Cada chamada registrava um par de listeners no `window`. Com dois
+ * componentes usando o hook e o layout remontando a cada navegação, os
+ * pares se acumulavam — e cada evento `online` disparava tantas
+ * conferências quantos pares houvesse.
+ *
+ * O contador aqui garante que exista no máximo um par vivo, não
+ * importa quantos componentes peçam.
  */
+let assinantesDeRede = 0
+let desligarRede: (() => void) | null = null
+
 export function observarRede(): () => void {
   if (typeof window === 'undefined') return () => {}
 
-  const caiu = () => anunciar('sem_conexao')
-  const voltou = () => {
-    void conexao.conferir()
+  assinantesDeRede += 1
+
+  if (!desligarRede) {
+    const caiu = () => anunciar('sem_conexao')
+    const voltou = () => {
+      void conexao.conferir()
+    }
+
+    window.addEventListener('offline', caiu)
+    window.addEventListener('online', voltou)
+
+    /*
+      A volta do segundo plano também conta.
+
+      No iPhone, trocar de aplicativo e voltar suspende o `fetch` e o
+      WebSocket. O navegador não dispara `online` porque, para ele,
+      nada mudou — a rede continua lá. Mas o socket morreu, e a tela
+      volta mostrando dados velhos sem que nada os atualize.
+
+      `visibilitychange` é o único aviso que existe nesse caso.
+    */
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible') void conexao.conferir()
+    }
+    document.addEventListener('visibilitychange', aoVoltar)
+
+    desligarRede = () => {
+      window.removeEventListener('offline', caiu)
+      window.removeEventListener('online', voltou)
+      document.removeEventListener('visibilitychange', aoVoltar)
+    }
   }
 
-  window.addEventListener('offline', caiu)
-  window.addEventListener('online', voltou)
-
   return () => {
-    window.removeEventListener('offline', caiu)
-    window.removeEventListener('online', voltou)
+    assinantesDeRede = Math.max(0, assinantesDeRede - 1)
+    if (assinantesDeRede === 0 && desligarRede) {
+      desligarRede()
+      desligarRede = null
+    }
   }
 }

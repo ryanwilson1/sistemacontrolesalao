@@ -9,8 +9,21 @@ class RepositorioClientes extends RepositorioBase<Cliente> {
   }
 
   /** Busca por nome ou telefone, já paginada. */
-  async paginar(termo: string, pagina: number, porPagina: number): Promise<Pagina<Cliente>> {
-    const todos = (await this.listar()).filter((c) => c.ativo)
+  /**
+   * `arquivadas` inverte o filtro em vez de removê-lo.
+   *
+   * Ver as duas listas juntas parece mais simples e é pior: a cliente
+   * arquivada reapareceria misturada às ativas, e a proprietária não
+   * teria como saber qual é qual sem abrir cada ficha. Arquivar
+   * deixaria de significar alguma coisa.
+   */
+  async paginar(
+    termo: string,
+    pagina: number,
+    porPagina: number,
+    arquivadas = false,
+  ): Promise<Pagina<Cliente>> {
+    const todos = (await this.listar()).filter((c) => (arquivadas ? !c.ativo : c.ativo))
     const busca = termo.trim().toLowerCase()
     const numero = digitos(termo)
 

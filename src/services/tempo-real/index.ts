@@ -31,8 +31,12 @@ export const tempoReal: CanalTempoReal =
  * escrita passa por lá. Espalhar esta chamada pelas telas seria garantir
  * que uma delas esquecesse.
  *
- * Com Supabase isto vira um no-op: quem avisa passa a ser o Postgres,
- * a partir da própria gravação.
+ * Com Supabase, `publicar` não anuncia — quem anuncia é o Postgres, a
+ * partir da própria gravação. O que a chamada faz lá é registrar o eco
+ * esperado, para o evento que voltar do banco ser reconhecido como
+ * desta aba (ver `ecos.ts`). O registro mora DENTRO do canal, e não
+ * aqui: registrá-lo duas vezes deixaria um eco órfão pendente, e esse
+ * órfão engoliria a próxima mudança vinda de outro aparelho.
  */
 export function publicarMudanca(colecao: Parameters<CanalTempoReal['publicar']>[0]): void {
   tempoReal.publicar(colecao)

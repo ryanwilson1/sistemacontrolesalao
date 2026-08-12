@@ -19,6 +19,18 @@ import type { ArquivoBackup, ValidacaoBackup } from '@/types'
 
 export interface ResultadoRestauracao {
   restaurados: number
+  /**
+   * Coleções que o SISTEMA conhece e o ARQUIVO não trouxe.
+   *
+   * Elas ficam como estavam — restaurar não as apaga — mas isso é uma
+   * decisão que a proprietária precisa VER, não um detalhe engolido. Um
+   * backup antigo sem "caixas" restaurado hoje deixa o caixa atual de
+   * pé ao lado de agendamentos de meses atrás: estado híbrido. Correto
+   * às vezes, surpresa nunca.
+   */
+  ausentes: Colecao[]
+  /** Coleções que o arquivo trouxe e este sistema não reconhece. */
+  desconhecidas: string[]
   colecoes: number
   backupDeSeguranca: string | null
 }
@@ -94,10 +106,17 @@ export async function restaurarDeArquivo(
 
   // Prepara tudo antes de gravar qualquer coisa.
   const preparadas: [Colecao, unknown[]][] = []
+  const ausentes: Colecao[] = []
+  const desconhecidas = Object.keys(arquivo.conteudo.colecoes).filter(
+    (nome) => !(COLECOES as readonly string[]).includes(nome),
+  )
 
   for (const colecao of COLECOES) {
     const registros = arquivo.conteudo.colecoes[colecao]
-    if (!registros) continue
+    if (!registros) {
+      ausentes.push(colecao)
+      continue
+    }
     if (!Array.isArray(registros)) {
       throw new ErroDeRegra(`A coleção "${colecao}" veio em formato inesperado.`)
     }
@@ -136,10 +155,13 @@ export async function restaurarDeArquivo(
       operacao: 'restauracao',
       descricao: `Restaurado "${arquivo.metadados.nome}"`,
       sucesso: true,
-      detalhe: `${total} registro(s) em ${linhas?.length ?? 0} coleção(ões).`,
+      detalhe:
+        `${total} registro(s) em ${linhas?.length ?? 0} coleção(ões).` +
+        (ausentes.length ? ` Mantidas como estavam (não vieram no arquivo): ${ausentes.join(', ')}.` : '') +
+        (desconhecidas.length ? ` Ignoradas (desconhecidas): ${desconhecidas.join(', ')}.` : ''),
     })
 
-    return { restaurados: total, colecoes: linhas?.length ?? 0, backupDeSeguranca }
+    return { restaurados: total, colecoes: linhas?.length ?? 0, backupDeSeguranca, ausentes, desconhecidas }
   }
 
   /*
@@ -221,7 +243,7 @@ export async function restaurarDeArquivo(
     responsavelId: opcoes.responsavelId ?? null,
   })
 
-  return { restaurados, colecoes: preparadas.length, backupDeSeguranca }
+  return { restaurados, colecoes: preparadas.length, backupDeSeguranca, ausentes, desconhecidas }
 }
 
 /** Restaura a partir de uma cópia guardada no próprio sistema. */

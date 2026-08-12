@@ -94,12 +94,45 @@ export class RepositorioBase<T extends Registro> {
     return todos.filter(criterio)
   }
 
-  async criar(dados: Omit<T, keyof Registro>): Promise<T> {
+  async criar(dados: Omit<T, keyof Registro>, opcoes?: { id?: string }): Promise<T> {
     const agora = new Date().toISOString()
-    const registro = { ...dados, id: novoId(), criadoEm: agora, atualizadoEm: agora } as T
+
+    /*
+      O id pode vir de fora — e isso é a idempotência inteira.
+
+      O formulário gera o id quando a pessoa COMEÇA o envio e o repete
+      na nova tentativa. Se a primeira gravação chegou ao banco mas a
+      resposta se perdeu (timeout, rede caindo na volta), a segunda
+      tentativa bate na chave primária e o adaptador a trata como a
+      confirmação que faltava — uma linha no banco, nunca duas.
+
+      Sem id de fora, cada chamada gera o seu, como sempre foi.
+    */
+    const registro = { ...dados, id: opcoes?.id ?? novoId(), criadoEm: agora, atualizadoEm: agora } as T
+
+    /*
+      Inserir NÃO carrega a coleção antes.
+
+      A versão anterior fazia `listar()` para montar a lista completa
+      que o caminho sem escrita granular precisa — mas fazia isso
+      SEMPRE, mesmo quando o adaptador sabe inserir uma linha. Criar o
+      primeiro agendamento do dia com o espelho frio custava baixar a
+      tabela inteira de agendamentos para, no fim, mandar um INSERT de
+      uma linha.
+
+      Agora a lista completa só é montada no caminho que a usa.
+    */
+    if (armazenamento.inserir) {
+      const confirmado = await armazenamento.inserir<T>(this.colecao, registro)
+      publicarMudanca(this.colecao)
+      // O que volta é o que o BANCO gravou: com `versao` do gatilho,
+      // defaults e colunas completadas por trigger. É este objeto que
+      // a tela deve guardar — não o rascunho local.
+      return confirmado ?? registro
+    }
 
     const todos = await this.listar()
-    await this.persistirUm('inserir', registro.id, registro, [...todos, registro])
+    await this.persistir([...todos, registro])
     return registro
   }
 

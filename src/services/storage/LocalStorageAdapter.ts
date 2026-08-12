@@ -53,11 +53,49 @@ export class LocalStorageAdapter implements AdaptadorDeArmazenamento {
         antes continua recuperável. A tela de diagnóstico oferece
         exportar ou descartar, e o descarte é um clique consciente
         dela, não um efeito colateral de ter atualizado o sistema.
+
+        ---------------------------------------------------------------
+        A versão só avança quando a mudança TERMINOU
+        ---------------------------------------------------------------
+        A implementação anterior marcava a versão nova incondicionalmente
+        — inclusive quando o arquivamento falhava NO MEIO (localStorage
+        cheio, por exemplo). O resultado era o pior estado possível:
+        parte dos dados arquivada, parte no lugar antigo, e o sistema
+        convencido de que estava tudo no formato novo. As chaves
+        remanescentes do formato velho passavam a ser lidas como se
+        fossem do novo — mistura de formatos sem erro e sem aviso.
+
+        Agora a regra é a de qualquer migração decente: ou termina, ou
+        não aconteceu. Falhou uma chave? A versão fica onde estava, o
+        que falhou fica anotado, e a PRÓXIMA abertura tenta de novo — o
+        arquivamento é idempotente (copiar por cima do mesmo conteúdo e
+        pular o que já saiu do lugar são operações inofensivas).
       */
-      if (versaoGuardada > 0) this.arquivarFormatoAntigo(versaoGuardada)
-      window.localStorage.setItem(CHAVE_VERSAO, String(VERSAO))
+      const pendentes = versaoGuardada > 0 ? this.arquivarFormatoAntigo(versaoGuardada) : []
+
+      if (pendentes.length === 0) {
+        window.localStorage.setItem(CHAVE_VERSAO, String(VERSAO))
+        this.chavesPresas.clear()
+      } else {
+        for (const chave of pendentes) this.chavesPresas.add(chave)
+        console.error(
+          `[storage] migração do formato v${versaoGuardada} incompleta: ` +
+            `${pendentes.length} chave(s) sem espaço para arquivar. ` +
+            'Os dados antigos foram preservados; a próxima abertura tentará de novo.',
+        )
+      }
     }
   }
+
+  /**
+   * Chaves do formato antigo que AINDA não foram arquivadas.
+   *
+   * Enquanto uma chave está aqui, ela não pode ser lida como formato
+   * novo (seria mistura de formatos) nem sobrescrita por uma gravação
+   * (destruiria o único exemplar do dado antigo). A leitura devolve
+   * vazio e a gravação tenta arquivar primeiro — ver `gravar`.
+   */
+  private chavesPresas = new Set<string>()
 
   /**
    * Move o conteúdo do formato anterior para fora do caminho.
@@ -66,24 +104,37 @@ export class LocalStorageAdapter implements AdaptadorDeArmazenamento {
    * o sistema segue: perder o dado para abrir mais rápido nunca é a
    * troca certa.
    */
-  private arquivarFormatoAntigo(versao: number): void {
+  private arquivarFormatoAntigo(versao: number): string[] {
     const chaves = Object.keys(window.localStorage).filter(
       (c) => c.startsWith(`${PREFIXO}:`) && !c.startsWith(PREFIXO_ARQUIVADO) && c !== CHAVE_VERSAO,
     )
-    if (chaves.length === 0) return
 
-    try {
-      for (const chave of chaves) {
-        const conteudo = window.localStorage.getItem(chave)
-        if (conteudo === null) continue
+    /*
+      O try/catch mora DENTRO do laço, por chave — e isso é o conserto.
+
+      A versão anterior envolvia o laço inteiro: a primeira chave sem
+      espaço abortava as seguintes em silêncio, e quem chamou nunca
+      soube. Agora cada chave tem seu próprio desfecho: copiada e
+      removida (sucesso), ou anotada na lista de pendências (falha). A
+      cópia vem ANTES da remoção de propósito — se a cópia falha, o
+      original está intacto; se a remoção falha (não acontece na
+      prática, mas o contrato não depende disso), existe uma cópia.
+    */
+    const pendentes: string[] = []
+
+    for (const chave of chaves) {
+      const conteudo = window.localStorage.getItem(chave)
+      if (conteudo === null) continue
+
+      try {
         window.localStorage.setItem(`${PREFIXO_ARQUIVADO}:${versao}:${chave}`, conteudo)
         window.localStorage.removeItem(chave)
+      } catch {
+        pendentes.push(chave)
       }
-    } catch {
-      // Sem espaço para a cópia. O original fica onde está — a próxima
-      // leitura o descarta por não bater com o formato, e nada é
-      // destruído por nossa conta.
     }
+
+    return pendentes
   }
 
   /**
@@ -117,6 +168,15 @@ export class LocalStorageAdapter implements AdaptadorDeArmazenamento {
 
     if (!this.disponivel) return []
 
+    /*
+      Chave presa = conteúdo do FORMATO ANTIGO ainda no lugar (a
+      migração não conseguiu arquivá-lo — sem espaço). Ler isso como se
+      fosse formato novo é mistura de formatos: parseia, entra no
+      espelho e contamina a tela. A coleção se apresenta vazia até a
+      pendência se resolver; o dado antigo continua intacto no disco.
+    */
+    if (this.chavesPresas.has(this.chave(colecao))) return []
+
     const bruto = window.localStorage.getItem(this.chave(colecao))
     if (!bruto) return []
 
@@ -146,6 +206,28 @@ export class LocalStorageAdapter implements AdaptadorDeArmazenamento {
       gravação deixa memória e disco na mesma versão — a anterior. O
       erro sobe para quem chamou, a tela avisa, e nada some depois.
     */
+
+    /*
+      Gravar por cima de uma chave presa destruiria o ÚNICO exemplar do
+      dado antigo — a exata coisa que a migração existe para impedir.
+      Última tentativa de arquivar agora (algum espaço pode ter vagado);
+      não deu, o erro sobe com a causa real e a instrução prática, em
+      vez de um sucesso que apaga história.
+    */
+    if (this.chavesPresas.has(this.chave(colecao))) {
+      const pendentes = this.arquivarFormatoAntigo(
+        Number(window.localStorage.getItem(CHAVE_VERSAO) ?? 0),
+      )
+      this.chavesPresas.clear()
+      for (const chave of pendentes) this.chavesPresas.add(chave)
+
+      if (this.chavesPresas.has(this.chave(colecao))) {
+        throw new Error(
+          'O armazenamento do navegador está cheio e ainda guarda dados de uma versão anterior. ' +
+            'Exporte ou descarte os dados antigos na tela de Backup antes de gravar.',
+        )
+      }
+    }
     if (!this.disponivel) {
       // Sem localStorage (navegação anônima em alguns celulares), o
       // espelho é tudo que existe. Aqui ele é a persistência possível.

@@ -4,6 +4,7 @@ import { clientesRepo } from './clientes'
 import { profissionaisRepo, jornadaRepo, studioRepo } from './equipe'
 import { reservasRepo } from './portal'
 import { bloqueiosRepo } from './bloqueios'
+import { lembretesRepo } from './comunicacao'
 import {
   calcularFim, garantirCapacidade, garantirHorarioLivre, garantirSemBloqueio,
   garantirSemReserva, estaAtivo,
@@ -113,6 +114,13 @@ class RepositorioAgendamentos extends RepositorioBase<Agendamento> {
     situacao?: SituacaoAgendamento
     /** Quem está confirmando pelo portal: a própria reserva não a atrapalha. */
     visitanteId?: string | null
+    /**
+     * Id gerado pelo formulário no INÍCIO do envio e repetido na nova
+     * tentativa. É o que faz um retry após timeout encontrar a chave
+     * primária ocupada — e ser tratado como a confirmação que faltava,
+     * nunca como um segundo agendamento.
+     */
+    idIdempotencia?: string
   }): Promise<Agendamento> {
     const [servico, studio] = await Promise.all([
       servicosRepo.buscar(dados.servicoId),
@@ -137,7 +145,18 @@ class RepositorioAgendamentos extends RepositorioBase<Agendamento> {
     garantirSemReserva({ ...dados, fim, visitanteId: dados.visitanteId ?? null }, reservas)
     garantirCapacidade({ inicio: dados.inicio, fim }, existentes, studio?.atendimentosSimultaneos ?? 0)
 
-    return this.criar({
+    /*
+      A colisão de protocolo é tratada AQUI, não na pessoa.
+
+      O código nasce do espelho local ("quais já existem?"), e o
+      espelho de um celular não vê o que o outro gerou há meio segundo.
+      O índice único `agendamentos_protocolo_unico` pega a colisão no
+      banco — e a resposta certa para ela é outro código, não uma
+      mensagem de erro para a cliente decifrar. Uma tentativa extra
+      basta: duas colisões seguidas num universo de milhares de códigos
+      é sinal de problema maior, e aí o erro deve subir.
+    */
+    const montar = async () => ({
       clienteId: dados.clienteId,
       profissionalId: dados.profissionalId,
       servicoId: dados.servicoId,
@@ -158,6 +177,16 @@ class RepositorioAgendamentos extends RepositorioBase<Agendamento> {
       finalizadoEm: null,
       remarcacoes: [],
     })
+
+    try {
+      return await this.criar(await montar(), { id: dados.idIdempotencia })
+    } catch (falha) {
+      const constraint = (falha as { constraint?: string }).constraint ?? ''
+      if ((falha as { code?: string }).code === '23505' && /protocolo/i.test(constraint)) {
+        return this.criar(await montar(), { id: dados.idIdempotencia })
+      }
+      throw falha
+    }
   }
 
   /** Move ou altera um agendamento, revalidando o conflito. */
@@ -214,6 +243,75 @@ class RepositorioAgendamentos extends RepositorioBase<Agendamento> {
 
   async mudarSituacao(id: string, situacao: SituacaoAgendamento): Promise<Agendamento> {
     return this.atualizar(id, { situacao })
+  }
+
+  /**
+   * Apaga um agendamento de vez.
+   *
+   * ---------------------------------------------------------------
+   * Por que isto não existia — e por que existe agora
+   * ---------------------------------------------------------------
+   * O sistema oferecia cancelar e mais nada. Cancelar é a resposta
+   * certa para a cliente que desmarcou: o horário volta à grade e a
+   * ficha guarda o que aconteceu.
+   *
+   * Mas há o outro caso, e ele é comum: o registro **errado**. Nome
+   * trocado, dia errado, dedo escorregando na grade. Cancelar isso
+   * deixa na agenda um rastro de algo que nunca existiu, e a
+   * proprietária fica com uma lista de cancelamentos que não são
+   * cancelamentos.
+   *
+   * Daí a divisão: cancelar preserva história, excluir apaga engano.
+   *
+   * ---------------------------------------------------------------
+   * O que a exclusão NÃO pode levar junto
+   * ---------------------------------------------------------------
+   * Um atendimento concluído virou dinheiro no caixa, pontos na
+   * fidelidade e ficha de evolução da cliente. Apagá-lo faria o
+   * fechamento do dia deixar de bater — e ninguém saberia por quê,
+   * porque a linha que explicava a entrada teria sumido.
+   *
+   * Por isso o concluído é recusado aqui, com a alternativa dita na
+   * mensagem. A regra vive no repositório e não na tela porque a tela
+   * é uma das formas de chegar até aqui, e a próxima que alguém
+   * escrever não vai lembrar de repeti-la.
+   */
+  async excluir(id: string): Promise<void> {
+    const atual = await this.buscar(id)
+    if (!atual) throw new ErroDeRegra('Este agendamento não existe mais.')
+
+    if (atual.situacao === 'concluido') {
+      throw new ErroDeRegra(
+        'Este atendimento já foi concluído e gerou registro financeiro. ' +
+          'Para removê-lo da agenda, cancele-o em vez de excluir.',
+      )
+    }
+
+    if (atual.situacao === 'em_atendimento') {
+      throw new ErroDeRegra(
+        'A cliente está em atendimento agora. Conclua ou cancele antes de excluir.',
+      )
+    }
+
+    /*
+      Os lembretes saem primeiro.
+
+      Eles apontam para o agendamento com `on delete cascade`, então o
+      banco os levaria junto de qualquer forma. Cancelá-los antes é o
+      que impede o caso ruim do meio do caminho: um lembrete já
+      disparado para a fila de envio continuaria a caminho do WhatsApp
+      da cliente, avisando de um horário que não existe mais.
+
+      Falhar aqui não impede a exclusão — o agendamento errado precisa
+      sair da agenda de qualquer jeito.
+    */
+    try {
+      await lembretesRepo.cancelarDoAgendamento(id)
+    } catch {
+      // O cascade do banco cobre o resto.
+    }
+
+    await this.remover(id)
   }
 
   /**

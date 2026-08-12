@@ -163,8 +163,15 @@ export interface AdaptadorDeArmazenamento {
      de usar.
   ------------------------------------------------------------------ */
 
-  /** Grava um registro novo. */
-  inserir?<T>(colecao: Colecao, registro: T): Promise<void>
+  /**
+   * Grava um registro novo e devolve o que foi CONFIRMADO.
+   *
+   * O retorno não é cortesia: nas tabelas versionadas, a `versao`
+   * nasce de um gatilho do banco — e a tela precisa dela para a
+   * primeira edição não declarar versão nenhuma. Adaptadores sem
+   * servidor devolvem o próprio registro, que ali é a verdade.
+   */
+  inserir?<T>(colecao: Colecao, registro: T): Promise<T>
 
   /**
    * Grava a versão nova de um registro que já existe.
@@ -191,6 +198,20 @@ export interface AdaptadorDeArmazenamento {
 
   /** Remove um registro. */
   removerUm?(colecao: Colecao, id: string): Promise<void>
+
+  /**
+   * Busca APENAS as linhas em que `campo = valor`, direto na fonte.
+   *
+   * Existe por causa das fotos: cada linha carrega a imagem em base64,
+   * e `listar()` para depois filtrar significava baixar TODAS as fotos
+   * de TODAS as clientes para abrir a ficha de uma. Com dez clientes
+   * fotografadas já eram dezenas de megabytes pela rede do celular —
+   * o tipo de custo que cresce em silêncio até a ficha parar de abrir.
+   *
+   * Opcional como os outros: o adaptador local filtra em memória, que
+   * ali é de graça.
+   */
+  buscarPorCampo?<T>(colecao: Colecao, campo: string, valor: string): Promise<T[]>
 
   /** Apaga tudo. */
   limpar(): Promise<void>

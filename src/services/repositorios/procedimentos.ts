@@ -1,4 +1,5 @@
 import { RepositorioBase } from './base'
+import { armazenamento } from '../storage'
 import { produtosRepo } from './estoque'
 import { ErroDeRegra } from '@/utils/erros'
 import type { Foto, MomentoFoto, Procedimento, ProdutoConsumido } from '@/types'
@@ -11,16 +12,30 @@ class RepositorioFotos extends RepositorioBase<Foto> {
     super('fotos')
   }
 
+  /*
+    As duas consultas abaixo NUNCA baixam a tabela inteira quando o
+    armazenamento sabe filtrar na fonte.
+
+    Fotos são a coleção mais pesada do sistema — cada linha carrega a
+    imagem em base64. `listar()` aqui significava: abrir a ficha da
+    Maria baixa as fotos da Maria E de todas as outras clientes, hoje e
+    para sempre, crescendo a cada atendimento fotografado. O filtro no
+    banco devolve só o recorte pedido.
+  */
   async doProcedimento(procedimentoId: string): Promise<Foto[]> {
+    if (armazenamento.buscarPorCampo) {
+      return armazenamento.buscarPorCampo<Foto>('fotos', 'procedimentoId', procedimentoId)
+    }
     const todas = await this.listar()
     return todas.filter((f) => f.procedimentoId === procedimentoId)
   }
 
   async doCliente(clienteId: string): Promise<Foto[]> {
-    const todas = await this.listar()
-    return todas
-      .filter((f) => f.clienteId === clienteId)
-      .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+    const fotos = armazenamento.buscarPorCampo
+      ? await armazenamento.buscarPorCampo<Foto>('fotos', 'clienteId', clienteId)
+      : (await this.listar()).filter((f) => f.clienteId === clienteId)
+
+    return [...fotos].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
   }
 
   /**
