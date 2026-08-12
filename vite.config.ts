@@ -2,7 +2,23 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
 
+/*
+  Carimbo de versão do build — a resposta para "qual versão está no ar?".
+
+  O print de produção mostrou um texto que o código-fonte já não tinha:
+  a única explicação é bundle antigo servido pelo cache. Sem um carimbo,
+  esse diagnóstico levou uma auditoria; com ele, leva um console.log.
+  Verificável em produção: `window.__VERSAO_STUDIO__` no console.
+*/
+const versao = `${process.env.npm_package_version ?? '0.0.0'}+${new Date()
+  .toISOString()
+  .replace(/[-:T]/g, '')
+  .slice(0, 12)}`
+
 export default defineConfig({
+  define: {
+    __VERSAO_STUDIO__: JSON.stringify(versao),
+  },
   plugins: [react()],
 
   resolve: {
