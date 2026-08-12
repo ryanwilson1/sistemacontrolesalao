@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
+import { registrarErro } from '@/services/diario-de-erros'
 
 /**
  * Rede de proteção da árvore de componentes.
@@ -15,8 +16,20 @@ export class LimiteDeErro extends Component<{ children: ReactNode }, { falhou: b
   }
 
   override componentDidCatch(erro: Error, info: ErrorInfo) {
-    if (import.meta.env.DEV) console.error('[falha na renderização]', erro, info)
-    // Em produção, envie para o monitoramento aqui.
+    /*
+      O registro roda em TODO ambiente — produção principalmente.
+
+      A versão anterior logava só em DEV, e "em produção, envie para o
+      monitoramento aqui" ficou como comentário: quando a tela travava
+      no celular da proprietária, não sobrava mensagem, pilha, rota nem
+      versão. Cada relato de "travou" era investigado do zero.
+
+      Agora fica tudo no diário (`studio:diario-de-erros` no
+      localStorage — sobrevive ao recarregar) e no console. A TELA
+      continua sem pilha nenhuma: o que muda é o diagnóstico, não o que
+      a cliente vê.
+    */
+    registrarErro({ erro, componente: info.componentStack ?? null })
   }
 
   override render() {
@@ -32,7 +45,8 @@ export class LimiteDeErro extends Component<{ children: ReactNode }, { falhou: b
             A tela travou
           </h1>
           <p className="mt-2 text-[14px] leading-relaxed text-onix-400">
-            Recarregue a página para continuar.
+            Recarregue a página para continuar. O problema ficou registrado
+            para o suporte.
           </p>
           <button
             onClick={() => window.location.reload()}

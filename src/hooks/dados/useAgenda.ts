@@ -101,3 +101,19 @@ export function useRemoverBloqueio() {
 
 /** Chave do dia, usada para invalidar consultas pontuais. */
 export const chaveDoDia = (data: Date) => isoData(data)
+
+/**
+ * Exclusão definitiva de um agendamento.
+ *
+ * Separado de `useMudarSituacao('cancelado')` de propósito: as duas
+ * ações parecem próximas na tela e são opostas no efeito. Cancelar
+ * guarda o registro; excluir apaga o engano. Uma função só, com um
+ * parâmetro decidindo qual, acabaria chamada errada.
+ *
+ * Invalida a mesma lista de um agendamento qualquer — sumir da agenda
+ * precisa refletir no painel, no histórico da cliente e nos horários
+ * livres na mesma volta.
+ */
+export function useExcluirAgendamento() {
+  return useAcao((id: string) => agendamentosRepo.excluir(id), AFETADOS_POR_AGENDAMENTO)
+}

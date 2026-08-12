@@ -70,12 +70,77 @@ export class ErroDeEspera extends Error {
   }
 }
 
+/**
+ * Sessão vencida ou conta sem acesso.
+ *
+ * Separado porque a saída é uma só e é específica: entrar de novo.
+ * Enquanto isto vinha como `ErroDeRegra` genérico, a proprietária lia
+ * a frase e ficava tentando salvar o formulário — que nunca ia salvar.
+ */
+export class ErroDeSessao extends Error {
+  constructor(mensagem?: string) {
+    super(mensagem ?? 'Sua sessão expirou. Entre novamente.')
+    this.name = 'ErroDeSessao'
+  }
+}
+
+/** A conta está válida, mas esta ação não é dela. */
+export class ErroDePermissao extends Error {
+  constructor(mensagem?: string) {
+    super(mensagem ?? 'Você não possui permissão para realizar esta ação.')
+    this.name = 'ErroDePermissao'
+  }
+}
+
 /** Traduz qualquer falha para uma frase que a usuária entende. */
 export function mensagemDeErro(erro: unknown): string {
   if (erro instanceof ErroDeEspera) return erro.message
   if (erro instanceof ErroDeConfiguracao) return erro.message
   if (erro instanceof ErroDeConflito) return erro.message
+  if (erro instanceof ErroDeSessao) return erro.message
+  if (erro instanceof ErroDePermissao) return erro.message
   if (erro instanceof ErroDeRegra) return erro.message
+
+  /*
+    Rede e tempo esgotado vêm ANTES do bloco genérico.
+
+    ---------------------------------------------------------------
+    O que estava errado
+    ---------------------------------------------------------------
+    Toda falha que não fosse regra de negócio caía na mesma frase:
+    "Algo não saiu como esperado. Tente novamente."
+
+    Ela é honesta e é inútil. Sem internet, tentar de novo não resolve
+    e a pessoa insiste. Com o servidor fora, idem. Com sessão vencida,
+    ela tenta a mesma coisa dez vezes antes de pensar em sair e entrar.
+
+    Cada uma dessas situações tem uma ação diferente, e a mensagem é o
+    único lugar onde o sistema pode dizer qual é.
+
+    A comparação é por `name` e não por `instanceof` de propósito: este
+    arquivo é importado por `services/rede.ts`, e importá-lo de volta
+    fecharia um ciclo que o Vite resolve com `undefined` em tempo de
+    execução — o `instanceof` passaria a ser sempre falso, em silêncio.
+  */
+  if (erro instanceof Error) {
+    if (erro.name === 'ErroDeTempo') {
+      // A mensagem vem pronta de quem estourou o prazo — e a diferença
+      // importa: numa leitura ela diz "tente de novo", numa gravação
+      // diz "confira antes de tentar", porque a gravação pode ter
+      // chegado. Sobrescrever aqui apagava essa distinção.
+      return erro.message
+    }
+    if (erro.name === 'ErroDeRede') {
+      return typeof navigator !== 'undefined' && navigator.onLine === false
+        ? 'Você está sem conexão com a internet.'
+        : 'Não conseguimos acessar o servidor no momento.'
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return 'Você está sem conexão com a internet.'
+  }
+
   if (erro instanceof Error) {
     if (erro.message.includes('QuotaExceeded')) {
       return 'O armazenamento do aparelho está cheio. Libere espaço e tente de novo.'

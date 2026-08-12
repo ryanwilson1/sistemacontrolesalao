@@ -38,7 +38,7 @@ export function useHistoricoDeCaixas(limite = 30) {
 
 export function useAbrirCaixa() {
   return useAcao(
-    (dados: { valorAbertura: number; responsavelId: string; observacoes?: string | null }) =>
+    (dados: { valorAbertura: number; responsavelId: string; observacoes?: string | null; idIdempotencia?: string }) =>
       caixaRepo.abrir(dados),
     AFETA_CAIXA,
   )
@@ -64,6 +64,7 @@ export function useMovimentarCaixa() {
       descricao: string
       valor: number
       forma: FormaPagamento
+      idIdempotencia?: string
       profissionalId?: string | null
     }) => caixaRepo.movimentar(dados),
     AFETA_CAIXA,

@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from 'react'
+import { lazy, Suspense, useEffect, type ComponentType, type ReactNode } from 'react'
 import {
   createBrowserRouter, createRoutesFromElements, Navigate, Route, RouterProvider,
 } from 'react-router-dom'
@@ -16,8 +16,28 @@ import { ExigeAcessoCompleto, Protegida, SomenteGestor, SomenteVisitante } from 
  * Com `<BrowserRouter>` bastava envolver; aqui é preciso um elemento
  * que já esteja lá dentro.
  *
- * O tempo real subiu para cá pela mesma razão — ele precisa conviver
- * com o roteador, e este é o primeiro ponto em que isso é verdade.
+ * ---------------------------------------------------------------
+ * Por que o `Suspense` saiu daqui
+ * ---------------------------------------------------------------
+ * Havia **um único** `Suspense` neste ponto, envolvendo `Contorno` e,
+ * por consequência, o `LayoutApp` inteiro. Toda navegação para uma
+ * página ainda não baixada suspendia a árvore toda:
+ *
+ *   1. o app inteiro sumia e virava um spinner de tela cheia;
+ *   2. o cabeçalho, o menu e a barra inferior **deixavam de existir** —
+ *      tocar neles não fazia nada, porque não havia neles o que tocar;
+ *   3. quando o pedaço chegava, o layout **remontava do zero**: duas
+ *      conferências de conexão, a sincronia do sino, a varredura de
+ *      chegadas do portal e os contadores do menu, tudo de novo;
+ *   4. `useTempoReal` mora aqui — então a inscrição do Realtime era
+ *      destruída e recriada a cada troca de tela.
+ *
+ * Era a explicação de "o botão não responde no primeiro toque". O
+ * botão respondia; ele apenas não estava mais na tela.
+ *
+ * Agora `Contorno` não suspende. Quem suspende é o miolo: o `<Outlet />`
+ * dentro do `LayoutApp` (a moldura fica de pé enquanto a página carrega)
+ * e cada rota pública, que não tem moldura para preservar.
  */
 function Contorno() {
   // Um lugar só no sistema inteiro: daqui para baixo, qualquer gravação
@@ -26,6 +46,11 @@ function Contorno() {
   useTempoReal()
 
   return <Outlet />
+}
+
+/** Fronteira de carregamento para as telas sem moldura (portal, acesso). */
+function Tela({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<CarregandoTela />}>{children}</Suspense>
 }
 
 /**
@@ -47,8 +72,7 @@ function Contorno() {
  *
  * Não é falha do código nem do servidor. É o preço de ter cada página
  * em seu próprio pacote — e acontece TODA vez que se publica com
- * alguém usando. A proprietária ia ver isso, sem entender, e concluir
- * que o sistema quebrou.
+ * alguém usando.
  *
  * ---------------------------------------------------------------
  * A correção
@@ -59,15 +83,17 @@ function Contorno() {
  *
  * A marca no `sessionStorage` é o que impede o laço infinito: se a
  * recarga não resolver — servidor fora, rede caída —, o erro sobe
- * normalmente e o `LimiteDeErro` mostra a mensagem. Recarregar duas
- * vezes seria trocar um erro visível por uma tela piscando para
- * sempre, que é pior.
+ * normalmente e o `LimiteDeErro` mostra a mensagem.
+ *
+ * O `importar` é devolvido junto para o pré-carregamento abaixo poder
+ * chamá-lo sem duplicar a lista de páginas — duas listas divergem, e a
+ * que divergisse deixaria uma tela de fora sem ninguém notar.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazyComRecarga<T extends { default: ComponentType<any> }>(
   importar: () => Promise<T>,
 ) {
-  return lazy(() =>
+  const componente = lazy(() =>
     importar().catch((falha) => {
       const CHAVE = 'studio:recarregou-por-pacote-ausente'
       const jaTentou = sessionStorage.getItem(CHAVE)
@@ -85,6 +111,8 @@ function lazyComRecarga<T extends { default: ComponentType<any> }>(
       throw falha
     }),
   )
+
+  return Object.assign(componente, { precarregar: importar })
 }
 
 /**
@@ -114,6 +142,73 @@ const MeuHorario     = lazyComRecarga(() => import('@/pages/agendamento/MeuHorar
 const NaoEncontrada  = lazyComRecarga(() => import('@/pages/NaoEncontrada'))
 
 /**
+ * As quatro telas do dia a dia, baixadas logo depois do login.
+ *
+ * ---------------------------------------------------------------
+ * Por que pré-carregar em vez de desligar o `lazy`
+ * ---------------------------------------------------------------
+ * Desligar devolveria um pacote único que o portal público também
+ * teria de baixar — a cliente que abre o link do Instagram pagaria por
+ * Relatórios, Backup e Estoque para escolher um horário.
+ *
+ * Pré-carregar tem o efeito prático que interessa (a troca de tela é
+ * instantânea porque o pedaço já está na memória) sem o custo. E
+ * acontece **depois** da primeira tela pintar, então não atrasa nada
+ * do que a proprietária está esperando.
+ *
+ * O resto das telas continua sob demanda: Relatórios e Backup são
+ * visitados uma vez por semana, e baixá-los na abertura seria gastar a
+ * franquia de dados dela por nada.
+ */
+const PRINCIPAIS = [Painel, Agenda, Clientes, Caixa]
+
+function usarPreCarregamento(): void {
+  useEffect(() => {
+    /*
+      Ocioso, não imediato.
+
+      `requestIdleCallback` espera o navegador terminar o que importa —
+      pintar a tela, responder ao primeiro toque. Sem essa espera, o
+      download dos quatro pedaços disputaria banda com as consultas da
+      tela que a proprietária está olhando agora, e a abertura ficaria
+      MAIS lenta em nome de a segunda tela ser mais rápida.
+
+      O `setTimeout` cobre o Safari, que só ganhou
+      `requestIdleCallback` recentemente e ainda o esconde atrás de
+      versão em muitos iPhones em uso.
+    */
+    const baixar = () => {
+      for (const pagina of PRINCIPAIS) {
+        void pagina.precarregar().catch(() => {
+          // Falhar aqui não custa nada: a página será baixada de novo
+          // quando alguém a abrir, e aí com uma tela de carregamento
+          // para acompanhar. Avisar seria assustar sem motivo.
+        })
+      }
+    }
+
+    const janela = window as typeof window & {
+      requestIdleCallback?: (cb: () => void, opcoes?: { timeout: number }) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+
+    if (janela.requestIdleCallback) {
+      const id = janela.requestIdleCallback(baixar, { timeout: 3_000 })
+      return () => janela.cancelIdleCallback?.(id)
+    }
+
+    const relogio = window.setTimeout(baixar, 1_200)
+    return () => window.clearTimeout(relogio)
+  }, [])
+}
+
+/** O painel, com a moldura de pé e o miolo suspendendo sozinho. */
+function Painelzinho() {
+  usarPreCarregamento()
+  return <LayoutApp />
+}
+
+/**
  * As rotas.
  *
  * Declaradas em JSX e convertidas para o formato de dados do React
@@ -122,24 +217,25 @@ const NaoEncontrada  = lazyComRecarga(() => import('@/pages/NaoEncontrada'))
  * quando há formulário preenchido e não salvo — **só existe no roteador
  * de dados**. Com o roteador antigo ele lança em tempo de execução.
  *
- * O desenho das rotas continua idêntico. Só o invólucro mudou.
+ * O desenho das rotas continua idêntico. O que mudou foi onde cada
+ * fronteira de carregamento fica.
  */
 const rotas = createRoutesFromElements(
-  <Route element={<Suspense fallback={<CarregandoTela />}><Contorno /></Suspense>}>
+  <Route element={<Contorno />}>
         {/* Portal da cliente — sem sessão, em pacote próprio */}
-        <Route path="/agendar/:identificador" element={<Agendamento />} />
-        <Route path="/agendar/:identificador/meu-horario" element={<MeuHorario />} />
+        <Route path="/agendar/:identificador" element={<Tela><Agendamento /></Tela>} />
+        <Route path="/agendar/:identificador/meu-horario" element={<Tela><MeuHorario /></Tela>} />
 
         {/* Acesso */}
-        <Route path="/entrar" element={<SomenteVisitante><Entrar /></SomenteVisitante>} />
+        <Route path="/entrar" element={<SomenteVisitante><Tela><Entrar /></Tela></SomenteVisitante>} />
 
         {/* Destino do link enviado por e-mail. Fora de `SomenteVisitante`
             de propósito: o link já abre sessão, e a guarda mandaria a
             pessoa para o painel sem deixá-la trocar a senha. */}
-        <Route path="/nova-senha" element={<NovaSenha />} />
+        <Route path="/nova-senha" element={<Tela><NovaSenha /></Tela>} />
 
         {/* Painel */}
-        <Route element={<Protegida><LayoutApp /></Protegida>}>
+        <Route element={<Protegida><Painelzinho /></Protegida>}>
           {/*
             A agenda fica fora da guarda seguinte de propósito: é a
             única tela que o acesso restrito enxerga, e é para cá que

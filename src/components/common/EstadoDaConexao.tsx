@@ -48,8 +48,8 @@ const APARENCIA: Record<EstadoConexao, {
   },
   sem_conexao: {
     cor: 'bg-perigo',
-    rotulo: 'Problema de conexão',
-    descricao: 'Nada foi confirmado no servidor. Verifique a internet e tente de novo.',
+    rotulo: 'Sem conexão',
+    descricao: 'Não estamos alcançando o servidor. O que você salvar agora não será gravado.',
     discreto: false,
   },
   sem_banco: {
@@ -113,6 +113,8 @@ export function FaixaDeConexao() {
 
   if (estado !== 'sem_conexao') return null
 
+  const semInternet = typeof navigator !== 'undefined' && navigator.onLine === false
+
   const tentar = async () => {
     setConferindo(true)
     await conexao.conferir()
@@ -126,9 +128,35 @@ export function FaixaDeConexao() {
       className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[#E6C9CC] bg-[#F7E9EA] px-4 py-2.5 text-[12.5px] text-[#7A3B42]"
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-perigo" />
+      {/*
+        A faixa diz qual dos dois problemas é.
+
+        ---------------------------------------------------------------
+        Por que o texto antigo era pior do que nenhum
+        ---------------------------------------------------------------
+        "Nenhuma alteração recente foi confirmada" era exibido para
+        QUALQUER gravação que falhasse — inclusive um erro de esquema no
+        Caixa, com a internet perfeita e a agenda carregando na mesma
+        tela. A proprietária lia uma afirmação falsa sobre os dados
+        dela, e a partir daí não confiava mais em nenhum aviso.
+
+        Agora esta faixa só aparece por falha de transporte (ver
+        `services/conexao.ts`), e distingue as duas causas — porque a
+        ação é diferente: sem internet, ela olha o Wi-Fi; com o servidor
+        fora, ela espera.
+      */}
       <span className="min-w-0 flex-1 leading-snug">
-        Não foi possível sincronizar com o servidor.{' '}
-        <strong className="font-medium">Nenhuma alteração recente foi confirmada.</strong>
+        {semInternet ? (
+          <>
+            Você está sem conexão com a internet.{' '}
+            <strong className="font-medium">O que você salvar agora não será gravado.</strong>
+          </>
+        ) : (
+          <>
+            Não conseguimos acessar o servidor no momento.{' '}
+            <strong className="font-medium">O que você salvar agora não será gravado.</strong>
+          </>
+        )}
       </span>
       <button
         onClick={() => void tentar()}
@@ -143,6 +171,9 @@ export function FaixaDeConexao() {
 
 /* ------------------------------------------------------------------ */
 
+/** Marca de módulo: a abertura do sistema confere a conexão uma vez. */
+let jaConferiuNaAbertura = false
+
 export function useEstadoDaConexao(): EstadoConexao {
   const [estado, setEstado] = useState<EstadoConexao>(() => conexao.atual())
 
@@ -151,14 +182,31 @@ export function useEstadoDaConexao(): EstadoConexao {
     const pararDeOuvirRede = observarRede()
 
     /*
-      Uma conferência de verdade na abertura.
+      Uma conferência de verdade na abertura — e só na primeira.
 
-      Sem isto o indicador ficaria em "verificando" para sempre, porque
-      nada mais dispara a checagem até a primeira gravação. E era esse
-      buraco que a versão anterior tapava afirmando "conectado" de
-      saída — trocando um indicador parado por um indicador mentiroso.
+      ---------------------------------------------------------------
+      O que este `if` evita
+      ---------------------------------------------------------------
+      Dois componentes usam este hook (o pontinho e a faixa), e o
+      layout inteiro remontava a cada navegação. Eram duas chamadas ao
+      `pulso` por tela aberta, para responder uma pergunta cuja
+      resposta os dois já compartilham — o estado é global.
+
+      `conexao.conferir()` agora também deduplica por dentro, então
+      isto é cinto e suspensório. Os dois valem: a deduplicação impede
+      chamadas simultâneas, esta marca impede a sequência de chamadas
+      espaçadas que a navegação produzia.
+
+      Sem a conferência inicial o indicador ficaria em "verificando"
+      para sempre, porque nada mais dispara a checagem até a primeira
+      gravação — e era esse buraco que a versão original tapava
+      afirmando "conectado" de saída, trocando um indicador parado por
+      um indicador mentiroso.
     */
-    void conexao.conferir()
+    if (!jaConferiuNaAbertura) {
+      jaConferiuNaAbertura = true
+      void conexao.conferir()
+    }
 
     return () => {
       cancelar()

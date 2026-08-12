@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { LogOut, Menu, X } from 'lucide-react'
 import { useSessao } from '@/contexts'
 import { AvisoDeChegada, EstadoDaConexao, FaixaDeConexao, Monograma, Sino } from '@/components/common'
+import { CarregandoTela } from '@/components/feedback'
 import { Retrato } from '@/components/ui'
 import { useQuantosEsperando, useQuantosPedidos } from '@/hooks'
 import { PAPEL } from '@/constants'
@@ -123,7 +124,23 @@ export function LayoutApp() {
         </header>
 
         <main className="mx-auto w-full max-w-[1320px] px-4 pb-28 pt-5 sm:px-6 lg:pb-10 lg:pt-8">
-          <Outlet />
+          {/*
+            A fronteira de carregamento é AQUI, e não na raiz das rotas.
+
+            Enquanto o pedaço de uma página baixa, só este miolo mostra
+            o carregamento. O cabeçalho com o botão do menu, a barra
+            inferior e o menu lateral continuam montados e clicáveis —
+            que é a diferença entre "a tela está carregando" e "o
+            aplicativo sumiu".
+
+            Antes, com a fronteira na raiz, o layout inteiro desmontava
+            a cada navegação: os botões deixavam de existir, e tocá-los
+            não fazia nada. Era a causa de a proprietária precisar
+            tocar duas, três, quatro vezes.
+          */}
+          <Suspense fallback={<CarregandoTela />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

@@ -22,8 +22,27 @@ import type { AgendamentoDetalhado } from '@/types'
  * consulta, a outra se anuncia.
  */
 
-/** De quanto em quanto tempo o painel olha se chegou algo. */
-const RITMO_MS = 8_000
+/**
+ * De quanto em quanto tempo o painel olha se chegou algo.
+ *
+ * ---------------------------------------------------------------
+ * Por que 8s virou 45s
+ * ---------------------------------------------------------------
+ * `chegadasRecentes()` chama `agendamentosRepo.listar()` — a tabela
+ * **inteira**. Enquanto o espelho em memória está quente isso é de
+ * graça, mas o tempo real derruba o espelho a cada gravação de
+ * qualquer aparelho. Numa manhã movimentada, boa parte dos ciclos
+ * caía numa releitura completa da agenda pela rede do celular.
+ *
+ * E o ganho de olhar a cada 8s é nenhum: o Realtime do Postgres já
+ * avisa este aparelho no instante em que um agendamento entra. Este
+ * relógio é a rede de segurança para quando o canal cai — e uma rede
+ * de segurança não precisa correr.
+ *
+ * 45 segundos é o pior atraso possível para um aviso que, no caminho
+ * normal, chega em menos de um segundo.
+ */
+const RITMO_MS = 45_000
 
 /** Quanto tempo o cartão fica na tela antes de sair sozinho. */
 const DURACAO_MS = 9_000
@@ -38,9 +57,19 @@ export function AvisoDeChegada() {
   anunciarRef.current = anunciar
 
   const verificar = useCallback(() => {
-    void chegadasRecentes().then((novos) => {
-      if (novos.length > 0) anunciarRef.current(novos)
-    })
+    void chegadasRecentes()
+      .then((novos) => {
+        if (novos.length > 0) anunciarRef.current(novos)
+      })
+      .catch(() => {
+        /*
+          A varredura roda sozinha a cada 45s. Sem este catch, cada
+          ciclo com a rede fora do ar virava uma rejeição não tratada
+          no console — e em alguns navegadores, um aviso na tela.
+          O aviso de chegada é conveniência: falhar em silêncio e
+          tentar no próximo ciclo é o comportamento certo.
+        */
+      })
   }, [])
 
   /*
