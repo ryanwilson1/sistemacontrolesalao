@@ -57,6 +57,17 @@ alter table contas_equipe drop constraint if exists contas_equipe_papel_check;
 alter table contas_equipe add constraint contas_equipe_papel_check
   check (papel in ('proprietaria','gerente','profissional','recepcao','agenda'));
 
+-- O MESMO check existe em `profissionais`, criado pelo 05-integridade.sql.
+--
+-- Está repetido aqui de propósito: quem roda só este arquivo — para
+-- conceder acesso a mais alguém, meses depois — não deveria precisar
+-- reaplicar o 05 inteiro para descobrir que o papel novo é recusado do
+-- outro lado.
+alter table profissionais drop constraint if exists profissional_papel_valido;
+
+alter table profissionais add constraint profissional_papel_valido
+  check (papel in ('proprietaria','gerente','profissional','recepcao','agenda'));
+
 
 -- ---------------------------------------------------------------------
 -- 2. A pergunta que as políticas fazem

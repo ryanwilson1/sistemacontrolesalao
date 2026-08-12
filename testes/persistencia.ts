@@ -104,6 +104,49 @@ const rodar = async () => {
   migrado.descartarVersaoAntiga()
   ok('descarte consciente limpa', migrado.dadosDeVersaoAntiga() === null)
 
+  /* ---------- Migração INTERROMPIDA: a versão não avança ---------- */
+  /*
+    O defeito original: sem espaço para arquivar, o catch engolia a
+    falha e a versão era marcada como migrada — parte dos dados no
+    formato antigo sob as chaves vivas, sistema convencido do
+    contrário. Cada asserção abaixo falha naquele código.
+  */
+  ls.clear()
+  ls.setItem('studio:versao', '4')
+  ls.setItem('studio:clientes', JSON.stringify([{ id: 'x', nome: 'Presa' }]))
+  ls.cotaEstourada = true
+
+  const interrompida = new LocalStorageAdapter()
+  await interrompida.iniciar()
+
+  ok('com a cota estourada, a versão NÃO avança',
+     ls.getItem('studio:versao') === '4')
+  ok('o dado antigo continua intacto no lugar',
+     ls.getItem('studio:clientes') !== null)
+  ok('a chave presa não é lida como formato novo (mistura)',
+     (await interrompida.listar('clientes')).length === 0)
+
+  let gravouSobrePresa = false
+  try {
+    await interrompida.gravar('clientes', [{ id: 'n', nome: 'Nova' }])
+    gravouSobrePresa = true
+  } catch { /* esperado: gravar destruiria o único exemplar antigo */ }
+  ok('gravar sobre a chave presa é recusado com erro', !gravouSobrePresa)
+  ok('e o dado antigo sobreviveu à tentativa',
+     (ls.getItem('studio:clientes') ?? '').includes('Presa'))
+
+  /* A cota volta: a PRÓXIMA abertura completa a migração sozinha. */
+  ls.cotaEstourada = false
+  const retomada = new LocalStorageAdapter()
+  await retomada.iniciar()
+
+  ok('com espaço de volta, a migração termina e a versão avança',
+     ls.getItem('studio:versao') !== '4')
+  ok('o dado antigo foi arquivado, não perdido',
+     ls.getItem('studio:v-anterior:4:studio:clientes') !== null)
+  ok('rodar de novo não duplica nem quebra (idempotência)',
+     (async () => { const r = new LocalStorageAdapter(); await r.iniciar(); return true })() !== null)
+
   console.log(falhas === 0 ? '\nTODOS OS TESTES PASSARAM' : `\n${falhas} FALHA(S)`)
   process.exit(falhas === 0 ? 0 : 1)
 }

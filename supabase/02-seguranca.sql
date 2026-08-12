@@ -224,6 +224,24 @@ end $$;
 -- ---------------------------------------------------------------------
 -- 5. Tira o acesso direto de quem não fez login
 -- ---------------------------------------------------------------------
+--
+-- ⚠️  ATENÇÃO — RODAR ESTE ARQUIVO SOZINHO DERRUBA O LINK PÚBLICO.
+--
+-- O `revoke all on all routines` abaixo alcança TODAS as funções, e as
+-- `portal_*` estão entre elas. São elas que o link de agendamento usa
+-- para falar com o banco sem login. Sem a permissão, a página abre e
+-- diz "Agendamento indisponível" — o que parece o portal desligado nos
+-- Ajustes, e não é.
+--
+-- Quem devolve o acesso:
+--
+--   03-portal.sql        as funções portal_* (é o que conserta)
+--   07-identidade.sql    portal_studio e pulso
+--   09-concorrencia.sql  portal_cheguei
+--
+-- Portanto: sempre que reaplicar este arquivo, rode 03, 07 e 09 em
+-- seguida. Aconteceu de verdade na implantação, e o sintoma não aponta
+-- para cá — foram vinte minutos até alguém desconfiar do revoke.
 revoke all on all tables    in schema public from anon;
 revoke all on all sequences in schema public from anon;
 revoke all on all routines  in schema public from anon;

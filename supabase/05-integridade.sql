@@ -53,8 +53,17 @@ declare
     ['clientes', 'cliente_telefone_so_digitos',
      $c$telefone is null or telefone ~ '^[0-9]{10,13}$'$c$],
 
+    -- 'agenda' entra aqui pelo mesmo motivo que entrou no `check` de
+    -- `contas_equipe` (10-acesso-agenda.sql): o papel mora em DUAS
+    -- tabelas, e `conceder_acesso_agenda` grava nas duas.
+    --
+    -- Atualizar só uma custou um erro em produção. A função gravava a
+    -- conta, chegava no `update profissionais` e batia neste check —
+    -- e, como ela é atômica, tudo voltava atrás. A mensagem falava de
+    -- "profissional_papel_valido", que não parece ter relação nenhuma
+    -- com conceder acesso a alguém.
     ['profissionais', 'profissional_papel_valido',
-     $c$papel in ('proprietaria','gerente','profissional','recepcao')$c$],
+     $c$papel in ('proprietaria','gerente','profissional','recepcao','agenda')$c$],
     ['profissionais', 'profissional_nome_preenchido', $c$length(btrim(nome)) >= 2$c$],
 
     ['jornada', 'jornada_horario_coerente',

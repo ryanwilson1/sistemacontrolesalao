@@ -218,3 +218,55 @@ select restaurar_da_trilha(1234);
 
 Ninguém escreve nessa tabela pela API — nem apaga. Se pudesse ser
 editada, deixaria de servir para o que existe.
+
+## 12-correcao-esquema.sql — OBRIGATÓRIO para o Caixa funcionar
+
+O frontend e o banco discordavam sobre o nome de 18 colunas em quatro
+tabelas (`caixas`, `movimentos_caixa`, `procedimentos`, `fotos`). O
+efeito em produção: abrir/fechar caixa e registrar movimentações NUNCA
+funcionaram — toda gravação voltava com PGRST204 e a tela mostrava
+"Algo não saiu como esperado".
+
+Este arquivo adiciona as colunas, copia os dados que já existem nas
+antigas e ensina a RPC `concluir_atendimento` a preencher as novas.
+Nada é apagado nem renomeado; rodar duas vezes não tem efeito.
+
+Rode no SQL Editor, depois dos anteriores. O bloco final confere o
+resultado e FALHA ALTO se alguma coluna não entrou — a última linha da
+saída deve ser o `NOTICE` de OK.
+
+Para conferir do lado do código: `npx tsx testes/esquema-caixa.ts`
+valida o fluxo inteiro do caixa contra as colunas destes arquivos.
+
+---
+
+## SEQUÊNCIA OFICIAL DE EXECUÇÃO — 13 arquivos
+
+Rode no SQL Editor, nesta ordem, cada um até o fim:
+
+01-esquema.sql → 02-seguranca.sql → 03-portal.sql → 04-tempo-real.sql →
+05-integridade.sql → 06-verificacao.sql → 07-identidade.sql →
+08-transacoes.sql → 09-concorrencia.sql → 10-acesso-agenda.sql →
+11-conferir-samara.sql → 12-correcao-esquema.sql →
+13-blindagem-e-verificacao.sql
+
+Num projeto que já rodou 01–11: basta rodar 12 e 13.
+
+O 13 termina com uma VERIFICAÇÃO FINAL que confere colunas, índices de
+unicidade, funções, gatilhos e se a RPC `atualizar_com_versao` é a
+versão corrigida. Ela FALHA ALTO com a lista do que faltou — a última
+linha da saída precisa ser:
+
+  NOTICE: VERIFICACAO FINAL OK
+
+"O arquivo executou" não é o critério. O critério é este NOTICE.
+
+## Idempotência das gravações críticas
+
+Agendamento, abertura de caixa e movimentação geram o id NO FORMULÁRIO
+e o repetem na nova tentativa. Se uma gravação chegou mas a resposta se
+perdeu (timeout), o retry bate na chave primária e o sistema o trata
+como confirmação — uma linha no banco, nunca duas. As guardas de
+concorrência (um caixa aberto, uma meta por mês, protocolo único,
+sobreposição de horário) moram no banco e estão testadas em
+`testes/concorrencia-postgres-real.ts` contra um Postgres real.
