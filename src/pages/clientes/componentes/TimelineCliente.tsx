@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { History } from 'lucide-react'
 import { Carta, CartaTitulo, Etiqueta } from '@/components/ui'
 import { EstadoVazio, Esqueleto } from '@/components/feedback'
@@ -46,12 +45,10 @@ export function TimelineCliente({
             const total = atendimento.preco - atendimento.desconto
 
             return (
-              <motion.li
+              <li
                 key={atendimento.id}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(indice * 0.04, 0.4), duration: 0.25 }}
-                className="relative flex gap-4 py-3"
+                className="entra-lista-lateral relative flex gap-4 py-3"
+                style={{ animationDelay: `${Math.min(indice * 0.04, 0.4)}s` }}
               >
                 <span className="relative z-[1] mt-1 grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border-2 border-white bg-white shadow-sm">
                   <span className={cn('h-2.5 w-2.5 rounded-full', situacao.ponto)} />
@@ -86,7 +83,7 @@ export function TimelineCliente({
                     </span>
                   )}
                 </div>
-              </motion.li>
+              </li>
             )
           })}
         </ol>

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import {
   Ban, CheckCircle2, Clock, MessageCircle, Play, Send, XCircle,
 } from 'lucide-react'
@@ -184,15 +183,13 @@ export default function Lembretes() {
             const vencido = lembrete.situacao === 'agendado' && new Date(lembrete.agendadoPara) <= new Date()
 
             return (
-              <motion.li
+              <li
                 key={lembrete.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(indice * 0.025, 0.3), duration: 0.24 }}
                 className={cn(
-                  'rounded-2xl border bg-white p-4 shadow-carta',
+                  'entra-lista rounded-2xl border bg-white p-4 shadow-carta',
                   vencido ? 'border-ouro-300' : 'border-onix-100',
                 )}
+                style={{ animationDelay: `${Math.min(indice * 0.025, 0.3)}s` }}
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">
@@ -244,7 +241,7 @@ export default function Lembretes() {
                     </div>
                   )}
                 </div>
-              </motion.li>
+              </li>
             )
           })}
         </ul>

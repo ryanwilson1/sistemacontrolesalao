@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { ArrowRight, CalendarX2 } from 'lucide-react'
 import { Carta, CartaTitulo, Etiqueta } from '@/components/ui'
 import { EstadoVazio, Esqueleto } from '@/components/feedback'
@@ -54,12 +53,10 @@ export function ProximosAtendimentos({
           {itens.map((item, indice) => {
             const situacao = SITUACAO[item.situacao as SituacaoAgendamento]
             return (
-              <motion.li
+              <li
                 key={item.id}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: Math.min(indice * 0.035, 0.3), duration: 0.25 }}
-                className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50 sm:gap-3.5 sm:px-5"
+                className="entra-lista-lateral flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50 sm:gap-3.5 sm:px-5"
+                style={{ animationDelay: `${Math.min(indice * 0.035, 0.3)}s` }}
               >
                 <div className="tabular w-[46px] shrink-0 text-right sm:w-[52px]">
                   <p className="font-display text-[14px] font-medium leading-none text-onix-800 sm:text-[15px]">
@@ -98,7 +95,7 @@ export function ProximosAtendimentos({
                   className={`h-2 w-2 shrink-0 rounded-full sm:hidden ${situacao.ponto}`}
                   title={situacao.rotulo}
                 />
-              </motion.li>
+              </li>
             )
           })}
         </ul>

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { motion } from 'framer-motion'
 import {
   ArrowDownLeft, ArrowUpRight, Lock, Minus, Plus, Receipt, Users, Wallet,
 } from 'lucide-react'
@@ -152,12 +151,10 @@ export default function Caixa() {
                 const entrada = movimento.tipo === 'entrada'
 
                 return (
-                  <motion.li
+                  <li
                     key={movimento.id}
-                    initial={{ opacity: 0, x: -4 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: Math.min(indice * 0.025, 0.3), duration: 0.22 }}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50 sm:px-5"
+                    className="entra-lista-lateral flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50 sm:px-5"
+                    style={{ animationDelay: `${Math.min(indice * 0.025, 0.3)}s` }}
                   >
                     <span
                       className={cn(
@@ -185,7 +182,7 @@ export default function Caixa() {
                     >
                       {entrada ? '+' : '−'} {dinheiro(movimento.valor)}
                     </p>
-                  </motion.li>
+                  </li>
                 )
               })}
             </ul>

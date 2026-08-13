@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { armazenamento, type Colecao } from '@/services/storage'
 import { tempoReal, IDENTIDADE_DESTA_ABA } from '@/services/tempo-real'
 import { cache, CHAVES_POR_COLECAO } from './dados/cache'
@@ -89,6 +89,24 @@ export function useTempoReal(): void {
  * bateria varrendo agenda que ninguém está olhando.
  */
 export function useRelogio(tarefa: () => void, intervaloMs: number): void {
+  /*
+    A tarefa vive num `ref`.
+
+    Antes ela era capturada pela closure do efeito e omitida das
+    dependências com um `eslint-disable`. Funcionava por acidente:
+    funcionava porque quem chama passa um `useCallback` estável. No dia
+    em que alguém passasse uma função inline — o que é o normal em React
+    — o efeito recriaria o intervalo a cada render, e um `setInterval`
+    recriado a cada render é a forma mais rápida de encher um celular de
+    relógios.
+
+    Com o `ref`, a tarefa sempre é a mais recente e o intervalo nunca
+    reinicia por causa dela. O `eslint-disable` deixou de ser necessário:
+    a lista de dependências agora é honesta.
+  */
+  const tarefaRef = useRef(tarefa)
+  tarefaRef.current = tarefa
+
   useEffect(() => {
     /*
       Intervalo zero (ou negativo) desliga.
@@ -109,8 +127,8 @@ export function useRelogio(tarefa: () => void, intervaloMs: number): void {
 
     const comecar = () => {
       if (relogio !== null) return
-      tarefa()
-      relogio = window.setInterval(tarefa, intervaloMs)
+      tarefaRef.current()
+      relogio = window.setInterval(() => tarefaRef.current(), intervaloMs)
     }
 
     const aoTrocarVisibilidade = () => {
@@ -125,6 +143,5 @@ export function useRelogio(tarefa: () => void, intervaloMs: number): void {
       parar()
       document.removeEventListener('visibilitychange', aoTrocarVisibilidade)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervaloMs])
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AtSign, Facebook, Globe2, Mail, MapPin, MessageCircle, Phone,
 } from 'lucide-react'
@@ -47,6 +47,22 @@ export function MeuSalao({
 
   const [form, setForm] = useState(() => doStudio(studio))
   const [recemSalvo, setRecemSalvo] = useState(false)
+
+  /*
+    O "salvo" apaga sozinho — e o relógio que o apaga precisa de dono.
+
+    Salvar e sair da tela em seguida é o caminho normal desta seção, e o
+    relógio solto continuava vivo por 2,6s chamando `setRecemSalvo` numa
+    tela desmontada. Não quebrava nada visível; segurava a closure e o
+    componente na memória, e repetia isso a cada salvamento.
+  */
+  const relogioDoSalvo = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (relogioDoSalvo.current !== null) window.clearTimeout(relogioDoSalvo.current)
+    }
+  }, [])
 
   const guarda = useAlteracoesNaoSalvas(form)
 
@@ -180,7 +196,11 @@ export function MeuSalao({
       // seria mentira — e é a mentira que a regra 9 proíbe.
       guarda.marcarComoSalvo()
       setRecemSalvo(true)
-      window.setTimeout(() => setRecemSalvo(false), 2600)
+      if (relogioDoSalvo.current !== null) window.clearTimeout(relogioDoSalvo.current)
+      relogioDoSalvo.current = window.setTimeout(() => {
+        relogioDoSalvo.current = null
+        setRecemSalvo(false)
+      }, 2600)
     } catch (falha) {
       aviso.erro('Não foi possível salvar', mensagemDeErro(falha))
     }

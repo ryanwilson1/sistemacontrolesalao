@@ -34,11 +34,17 @@ export interface Aba<T extends string> {
  *      ficar escondida fora da área visível.
  */
 export function Abas<T extends string>({
-  abas, ativa, aoTrocar, idAnimacao = 'aba', className,
+  abas, ativa, aoTrocar, idAnimacao: _idAnimacao, className,
 }: {
   abas: Aba<T>[]
   ativa: T
   aoTrocar: (valor: T) => void
+  /**
+   * Sobra da era do marcador compartilhado, mantida na assinatura de
+   * propósito: as telas continuam passando o valor, e removê-lo daqui
+   * obrigaria a tocar em cada chamador nesta rodada final — risco sem
+   * ganho. Sem `layoutId`, instâncias diferentes já não disputam nada.
+   */
   idAnimacao?: string
   className?: string
 }) {
@@ -71,10 +77,49 @@ export function Abas<T extends string>({
     }
   }, [abas.length])
 
-  // A aba escolhida vem para a área visível sozinha.
+  /*
+    A aba escolhida vem para a área visível — mas não na montagem.
+
+    ---------------------------------------------------------------
+    A rolagem que brigava com a navegação
+    ---------------------------------------------------------------
+    O efeito rodava também na primeira renderização, ou seja, **toda vez
+    que uma tela com abas era aberta**. E `html` tem
+    `scroll-behavior: smooth`, então `scrollIntoView` ali não era um
+    ajuste: era uma animação de rolagem começando no exato quadro em que
+    a página estava montando.
+
+    Pior, `block: 'nearest'` sobe pelos ancestrais até achar quem rola —
+    e num celular quem rola é a página inteira. Abrir a Agenda podia
+    empurrar a tela alguns pixels sozinha, competindo com a montagem da
+    grade e com a animação de entrada. Tocar em duas telas com abas em
+    sequência rápida deixava duas rolagens animadas disputando a mesma
+    página.
+
+    Na montagem não há o que corrigir: a aba ativa é a primeira, e ela já
+    está visível. O ajuste só é útil quando a pessoa TROCA de aba — e aí
+    é resposta a um toque dela, no momento certo.
+  */
+  const jaMontou = useRef(false)
+
   useEffect(() => {
+    if (!jaMontou.current) {
+      jaMontou.current = true
+      return
+    }
+
     const el = trilho.current?.querySelector<HTMLElement>('[aria-selected="true"]')
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+    if (!el) return
+
+    // Quem pediu menos movimento não recebe rolagem animada — e a
+    // rolagem instantânea custa um quadro em vez de vinte.
+    const suave = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    el.scrollIntoView({
+      behavior: suave ? 'smooth' : 'auto',
+      block: 'nearest',
+      inline: 'nearest',
+    })
   }, [ativa])
 
   return (
@@ -102,9 +147,26 @@ export function Abas<T extends string>({
             >
               {selecionada && (
                 <motion.span
-                  layoutId={`marcador-${idAnimacao}`}
+                  /*
+                    Sem `layoutId` — o mesmo raciocínio do LayoutApp.
+
+                    O marcador compartilhado obrigava o Framer a medir a
+                    pílula que sai e a que entra (`getBoundingClientRect`
+                    dos dois lados) para animar a viagem entre elas. Nas
+                    abas isso acontece no pior momento: a troca de aba
+                    costuma montar conteúdo novo logo abaixo — as seções
+                    do Portal, as visões da Agenda — e a medição forçada
+                    cai exatamente no quadro dessa montagem.
+
+                    Agora a pílula nasce no destino: opacity + scale,
+                    resolvidos pelo compositor, 160ms. O olho vê o fundo
+                    assentar na aba nova; o que ele não vê — a viagem —
+                    era o que custava caro.
+                  */
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.16, ease: 'easeOut' }}
                   className="absolute inset-0 rounded-lg bg-quartzo-100"
-                  transition={{ type: 'spring', stiffness: 400, damping: 34 }}
                 />
               )}
               <span className="relative">

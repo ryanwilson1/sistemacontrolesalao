@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import { Clock, Eye, EyeOff, Pencil, Plus, Scissors } from 'lucide-react'
 import { CabecalhoPagina } from '@/components/common'
 import { Botao, Carta, Etiqueta } from '@/components/ui'
@@ -70,12 +69,11 @@ export default function Servicos() {
 
               <ul className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {lista.map((servico, indice) => (
-                  <motion.li
+                  <li
                     key={servico.id}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: Math.min(indice * 0.03, 0.3), duration: 0.25 }}
-                  >
+                className="entra-lista"
+                style={{ animationDelay: `${Math.min(indice * 0.03, 0.3)}s` }}
+              >
                     <button
                       onClick={() => setEditando(servico)}
                       style={{ borderLeftColor: servico.cor, borderLeftWidth: 3 }}
@@ -120,7 +118,7 @@ export default function Servicos() {
                         </span>
                       </div>
                     </button>
-                  </motion.li>
+                  </li>
                 ))}
               </ul>
             </section>

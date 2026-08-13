@@ -284,6 +284,30 @@ function BotaoFechar({ aoFechar }: { aoFechar: () => void }) {
  * Devolve `null` quando o navegador não expõe `visualViewport` (ou
  * fora do navegador), e aí o CSS assume — é por isso que a classe
  * `sm:max-h-[92dvh]` continua no elemento.
+ *
+ * ---------------------------------------------------------------
+ * O modal que engasgava ao rolar
+ * ---------------------------------------------------------------
+ * A versão anterior chamava `setAltura(vv.height)` a cada evento
+ * `resize` **e a cada `scroll`** do viewport visual. No iPhone, rolar
+ * dentro do modal dispara `scroll` a 60Hz — e com o efeito elástico do
+ * fim da lista, `vv.height` oscila frações de pixel durante a
+ * borracha.
+ *
+ * Cada oscilação virava um `setState`, e cada `setState` redesenhava o
+ * modal inteiro: o painel, o cabeçalho, o formulário com seus doze
+ * campos, o rodapé. Sessenta vezes por segundo, enquanto o dedo desliza.
+ *
+ * Era a explicação de "o formulário trava quando eu rolo".
+ *
+ * Três guardas, e as três importam:
+ *
+ *   1. **rAF** — no máximo uma medição por quadro, e a medição acontece
+ *      no momento em que o navegador ia desenhar de qualquer forma;
+ *   2. **comparação** — `scroll` não muda a altura; só o teclado muda.
+ *      Diferença menor que 2px é ruído da borracha e não vira estado;
+ *   3. **cancelamento** — o quadro pendente morre no cleanup, senão ele
+ *      chamaria `setAltura` depois da desmontagem.
  */
 function useAlturaVisivel(aberto: boolean): number | null {
   const [altura, setAltura] = useState<number | null>(null)
@@ -292,14 +316,35 @@ function useAlturaVisivel(aberto: boolean): number | null {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null
     if (!aberto || !vv) return
 
-    const medir = () => setAltura(vv.height)
+    let quadro: number | null = null
+    let ultima = -1
+
+    const medir = () => {
+      quadro = null
+
+      const atual = Math.round(vv.height)
+      if (Math.abs(atual - ultima) < 2) return
+
+      ultima = atual
+      setAltura(atual)
+    }
+
+    const agendar = () => {
+      if (quadro !== null) return
+      quadro = window.requestAnimationFrame(medir)
+    }
+
+    // A primeira medição é direta: o modal precisa da altura certa já no
+    // quadro em que aparece, não no seguinte.
     medir()
 
-    vv.addEventListener('resize', medir)
-    vv.addEventListener('scroll', medir)
+    vv.addEventListener('resize', agendar)
+    vv.addEventListener('scroll', agendar)
+
     return () => {
-      vv.removeEventListener('resize', medir)
-      vv.removeEventListener('scroll', medir)
+      if (quadro !== null) window.cancelAnimationFrame(quadro)
+      vv.removeEventListener('resize', agendar)
+      vv.removeEventListener('scroll', agendar)
       setAltura(null)
     }
   }, [aberto])

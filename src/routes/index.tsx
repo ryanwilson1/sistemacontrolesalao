@@ -160,45 +160,145 @@ const NaoEncontrada  = lazyComRecarga(() => import('@/pages/NaoEncontrada'))
  * visitados uma vez por semana, e baixá-los na abertura seria gastar a
  * franquia de dados dela por nada.
  */
-const PRINCIPAIS = [Painel, Agenda, Clientes, Caixa]
+/**
+ * A fila, em ordem de utilidade.
+ *
+ * A tela atual não está aqui, e é de propósito: ela já está sendo
+ * baixada pelo caminho normal, com prioridade máxima do navegador.
+ * Pré-carregá-la seria disputar banda consigo mesma.
+ *
+ * O Painel fica por último porque, logo depois do login, ele **é** a
+ * tela atual — pedi-lo primeiro é o único item da lista com chance de
+ * ser puro desperdício.
+ */
+const PRINCIPAIS = [Agenda, Clientes, Caixa, Painel]
 
+/** Quanto a tela atual tem para se acomodar antes de pensarmos em fila. */
+const ESPERA_INICIAL_MS = 1_800
+
+/** Se o navegador nunca ficar ocioso, o pedaço desce assim mesmo. */
+const TETO_DE_ESPERA_MS = 4_000
+
+/** Aba escondida: adia sem descartar. Volta a tentar daqui a pouco. */
+const ESPERA_ESCONDIDA_MS = 3_000
+
+type Janela = typeof window & {
+  requestIdleCallback?: (cb: () => void, opcoes?: { timeout: number }) => number
+  cancelIdleCallback?: (id: number) => void
+}
+
+/** O que o navegador conta sobre a rede, quando conta. */
+type Conexao = { saveData?: boolean; effectiveType?: string }
+
+/**
+ * Pré-carregamento em fila, um pedaço por vez.
+ *
+ * ---------------------------------------------------------------
+ * O que havia aqui antes
+ * ---------------------------------------------------------------
+ * Quatro `import()` disparados no mesmo `requestIdleCallback`. O nome
+ * do gancho enganava: ele espera o navegador ficar ocioso **uma vez**,
+ * e depois disso os quatro downloads correm juntos, do começo ao fim,
+ * sem mais nenhuma checagem.
+ *
+ * No iPhone da proprietária isso acontece exatamente no pior instante —
+ * logo após o login, com o Painel montando dez consultas ao Supabase. As
+ * quatro conexões extras entram na mesma fila HTTP e nas mesmas antenas.
+ * O resultado que ela descreve como \"trava ao entrar\" é banda dela
+ * competindo com ela mesma.
+ *
+ * ---------------------------------------------------------------
+ * O desenho agora
+ * ---------------------------------------------------------------
+ *   1. espera a tela atual assentar;
+ *   2. espera o navegador ficar realmente ocioso;
+ *   3. baixa UM pedaço;
+ *   4. volta ao passo 2 para o próximo.
+ *
+ * E desiste inteiro quando não vale a pena: dados limitados ligados,
+ * rede 2G, ou a saída da tela — porque toda a fila é descartável por
+ * definição. Nada aqui é necessário; tudo aqui é adiantamento.
+ */
 function usarPreCarregamento(): void {
   useEffect(() => {
+    const janela = window as Janela
+
     /*
-      Ocioso, não imediato.
+      Economia de dados e rede fraca cancelam a ideia inteira.
 
-      `requestIdleCallback` espera o navegador terminar o que importa —
-      pintar a tela, responder ao primeiro toque. Sem essa espera, o
-      download dos quatro pedaços disputaria banda com as consultas da
-      tela que a proprietária está olhando agora, e a abertura ficaria
-      MAIS lenta em nome de a segunda tela ser mais rápida.
-
-      O `setTimeout` cobre o Safari, que só ganhou
-      `requestIdleCallback` recentemente e ainda o esconde atrás de
-      versão em muitos iPhones em uso.
+      Pré-carregar é gastar a franquia da proprietária hoje para
+      economizar meio segundo dela amanhã. Em 2G, o gasto é certo e a
+      economia não existe: o download não termina antes de ela abrir a
+      tela de qualquer forma.
     */
-    const baixar = () => {
-      for (const pagina of PRINCIPAIS) {
-        void pagina.precarregar().catch(() => {
+    const rede = (navigator as Navigator & { connection?: Conexao }).connection
+    if (rede?.saveData) return
+    if (typeof rede?.effectiveType === 'string' && /2g/i.test(rede.effectiveType)) return
+
+    let cancelado = false
+    let idOcioso: number | null = null
+    let idRelogio: number | null = null
+
+    const fila = [...PRINCIPAIS]
+
+    /** Espera o navegador não ter nada melhor para fazer. */
+    const quandoOcioso = (tarefa: () => void) => {
+      if (cancelado) return
+
+      if (janela.requestIdleCallback) {
+        idOcioso = janela.requestIdleCallback(tarefa, { timeout: TETO_DE_ESPERA_MS })
+        return
+      }
+
+      /*
+        Safari em muitos iPhones ainda não expõe `requestIdleCallback`.
+        O relógio é a aproximação possível — e o intervalo entre pedaços
+        é o que impede que a aproximação vire uma rajada.
+      */
+      idRelogio = window.setTimeout(tarefa, 900)
+    }
+
+    const proxima = () => {
+      if (cancelado) return
+
+      const pagina = fila.shift()
+      if (!pagina) return
+
+      /*
+        Aba escondida não baixa nada.
+
+        No celular, \"escondida\" é o estado normal: a proprietária troca
+        para o WhatsApp para responder a cliente. Baixar ali gasta bateria
+        e dados por uma tela que ninguém está esperando — e o iOS ainda
+        pode suspender a requisição no meio, deixando um pedaço pela
+        metade que terá de ser baixado de novo.
+      */
+      if (document.visibilityState !== 'visible') {
+        fila.unshift(pagina)
+        idRelogio = window.setTimeout(proxima, ESPERA_ESCONDIDA_MS)
+        return
+      }
+
+      void pagina
+        .precarregar()
+        .catch(() => {
           // Falhar aqui não custa nada: a página será baixada de novo
           // quando alguém a abrir, e aí com uma tela de carregamento
           // para acompanhar. Avisar seria assustar sem motivo.
         })
-      }
+        .then(() => {
+          // Um de cada vez, e só depois de o navegador respirar de novo.
+          quandoOcioso(proxima)
+        })
     }
 
-    const janela = window as typeof window & {
-      requestIdleCallback?: (cb: () => void, opcoes?: { timeout: number }) => number
-      cancelIdleCallback?: (id: number) => void
-    }
+    idRelogio = window.setTimeout(() => quandoOcioso(proxima), ESPERA_INICIAL_MS)
 
-    if (janela.requestIdleCallback) {
-      const id = janela.requestIdleCallback(baixar, { timeout: 3_000 })
-      return () => janela.cancelIdleCallback?.(id)
+    return () => {
+      cancelado = true
+      if (idOcioso !== null) janela.cancelIdleCallback?.(idOcioso)
+      if (idRelogio !== null) window.clearTimeout(idRelogio)
     }
-
-    const relogio = window.setTimeout(baixar, 1_200)
-    return () => window.clearTimeout(relogio)
   }, [])
 }
 

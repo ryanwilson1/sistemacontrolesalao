@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import {
   Check, Download, FileClock, Trash2, Upload, X, type LucideIcon,
 } from 'lucide-react'
@@ -41,12 +40,10 @@ export function Registros() {
           const { rotulo, icone: Icone } = OPERACAO[registro.operacao]
 
           return (
-            <motion.li
+            <li
               key={registro.id}
-              initial={{ opacity: 0, x: -4 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: Math.min(indice * 0.02, 0.3), duration: 0.22 }}
-              className="flex items-start gap-3 px-4 py-3 sm:px-5"
+              className="entra-lista-lateral flex items-start gap-3 px-4 py-3 sm:px-5"
+              style={{ animationDelay: `${Math.min(indice * 0.02, 0.3)}s` }}
             >
               <span
                 className={cn(
@@ -86,7 +83,7 @@ export function Registros() {
               >
                 {registro.sucesso ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
               </span>
-            </motion.li>
+            </li>
           )
         })}
       </ul>

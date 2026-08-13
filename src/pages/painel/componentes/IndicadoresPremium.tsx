@@ -204,12 +204,10 @@ export function NumerosSecundarios({
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       {itens.map((item, indice) => (
-        <motion.div
+        <div
           key={item.rotulo}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: Math.min(indice * 0.03, 0.3), duration: 0.25 }}
-          className="min-w-0 rounded-xl border border-onix-100 bg-white p-3.5"
+          className="entra-lista min-w-0 rounded-xl border border-onix-100 bg-white p-3.5"
+          style={{ animationDelay: `${Math.min(indice * 0.03, 0.3)}s` }}
         >
           <div className="flex items-start justify-between gap-2">
             <p className="eyebrow truncate">{item.rotulo}</p>
@@ -219,7 +217,7 @@ export function NumerosSecundarios({
             {item.valor}
           </p>
           <p className="mt-1.5 truncate text-[11px] text-onix-300">{item.detalhe}</p>
-        </motion.div>
+        </div>
       ))}
     </div>
   )

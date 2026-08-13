@@ -47,6 +47,33 @@ const RITMO_MS = 45_000
 /** Quanto tempo o cartão fica na tela antes de sair sozinho. */
 const DURACAO_MS = 9_000
 
+/**
+ * Piso entre duas varreduras, qualquer que seja o motivo.
+ *
+ * ---------------------------------------------------------------
+ * O que o intervalo sozinho não cobria
+ * ---------------------------------------------------------------
+ * `useRelogio` pausa com a aba escondida e **executa a tarefa na hora**
+ * quando ela volta a aparecer. Faz sentido: voltar ao sistema é
+ * exatamente quando se quer saber o que chegou.
+ *
+ * Só que no celular "voltar a aparecer" não é raro — é o gesto mais
+ * comum do dia. A proprietária sai para o WhatsApp responder a cliente e
+ * volta; desbloqueia o telefone para ver a hora e volta; troca de
+ * aplicativo três vezes em um minuto. Cada uma dessas voltas disparava
+ * `chegadasRecentes()`, que lê a tabela de agendamentos **inteira**.
+ *
+ * Cinco alternâncias em dois minutos eram cinco leituras completas da
+ * agenda pela rede do celular, para responder uma pergunta que o
+ * Realtime já respondeu.
+ *
+ * O piso mantém a resposta imediata da primeira volta e descarta as
+ * repetições. Vinte segundos é curto o bastante para nunca ser sentido
+ * como atraso — o caminho normal do aviso continua sendo o Realtime, que
+ * chega em menos de um segundo.
+ */
+const PISO_ENTRE_VARREDURAS_MS = 20_000
+
 export function AvisoDeChegada() {
   const { ehGestor } = useSessao()
   const navegar = useNavigate()
@@ -56,7 +83,31 @@ export function AvisoDeChegada() {
   const anunciarRef = useRef(anunciar)
   anunciarRef.current = anunciar
 
+  /** Uma varredura em andamento. Ver o comentário abaixo. */
+  const emVoo = useRef(false)
+  const ultimaVarredura = useRef(0)
+
   const verificar = useCallback(() => {
+    /*
+      Uma varredura por vez.
+
+      `chegadasRecentes()` lê a agenda inteira e a detalha. Numa rede de
+      loja isso pode passar dos 45 segundos do intervalo — e aí a
+      segunda partia com a primeira ainda no ar. Duas leituras completas
+      concorrentes, e as duas mexendo na mesma marca d'água de
+      `chegadas.ts`: a segunda podia consumir os anúncios da primeira e
+      um agendamento novo passar despercebido.
+
+      A guarda é síncrona (`ref`, não estado) porque as duas chamadas
+      podem acontecer no mesmo instante — o relógio e a volta ao
+      primeiro plano disparam juntos com frequência.
+    */
+    if (emVoo.current) return
+    if (Date.now() - ultimaVarredura.current < PISO_ENTRE_VARREDURAS_MS) return
+
+    emVoo.current = true
+    ultimaVarredura.current = Date.now()
+
     void chegadasRecentes()
       .then((novos) => {
         if (novos.length > 0) anunciarRef.current(novos)
@@ -69,6 +120,9 @@ export function AvisoDeChegada() {
           O aviso de chegada é conveniência: falhar em silêncio e
           tentar no próximo ciclo é o comportamento certo.
         */
+      })
+      .finally(() => {
+        emVoo.current = false
       })
   }, [])
 

@@ -22,6 +22,110 @@ const ESTILO: Record<TipoNotificacao, { icone: LucideIcon; classe: string }> = {
  * um retrato do agora, nunca uma caixa de entrada que acumula coisa
  * resolvida.
  */
+
+/* ------------------------------------------------------------------ */
+
+/**
+ * A sincronia é do SISTEMA, não do componente.
+ *
+ * ---------------------------------------------------------------
+ * O sino que era dois
+ * ---------------------------------------------------------------
+ * `LayoutApp` monta `<Sino />` duas vezes: uma no menu lateral do
+ * desktop, outra no cabeçalho do celular. As duas existem sempre — o
+ * menu lateral é escondido por `hidden lg:flex`, que é CSS, não
+ * desmontagem. O React nunca soube que uma delas está invisível.
+ *
+ * Como o intervalo morava dentro do componente, o desfecho era:
+ *
+ *   dois `setInterval` de 5 minutos, para sempre;
+ *   duas chamadas a `sincronizar` na abertura, ao mesmo tempo;
+ *   e `useAcao` não podia deduplicá-las — a guarda dele é por
+ *   instância do hook, e ali eram duas instâncias diferentes.
+ *
+ * A sincronia recalcula estoque baixo, caixa aberto e backup atrasado.
+ * Fazer isso em dobro é o dobro de leitura no banco a cada cinco
+ * minutos, em duas conexões simultâneas, para escrever exatamente o
+ * mesmo resultado.
+ *
+ * Aqui embaixo há um agendador só, com contagem de referências: quantos
+ * sinos existam, o relógio é um. O último a desmontar apaga a luz.
+ */
+
+const INTERVALO_MS = 300_000
+
+/**
+ * Piso entre duas apurações.
+ *
+ * Protege o caso que o intervalo sozinho não cobre: montar, desmontar e
+ * montar de novo — o que acontece a cada logout/login e a cada troca de
+ * papel. Sem o piso, cada remontagem dispararia uma apuração completa.
+ */
+const MINIMO_ENTRE_APURACOES_MS = 60_000
+
+let assinantes = 0
+let relogio: number | null = null
+let emVoo: Promise<unknown> | null = null
+let ultimaApuracao = 0
+let apurarAgora: (() => void) | null = null
+
+/**
+ * Liga este componente ao agendador único.
+ *
+ * @param ligado  desliga inteiro no acesso restrito
+ * @param sincronizar  a operação, sempre a mais recente (vive num `ref`)
+ */
+function useSincroniaCompartilhada(ligado: boolean, sincronizar: () => Promise<unknown>) {
+  const operacao = useRef(sincronizar)
+  operacao.current = sincronizar
+
+  useEffect(() => {
+    if (!ligado) return
+
+    const apurar = () => {
+      // Uma por vez. Uma apuração lenta não pode ser atropelada pela
+      // seguinte — seriam duas leituras concorrentes do mesmo estado.
+      if (emVoo) return
+      if (Date.now() - ultimaApuracao < MINIMO_ENTRE_APURACOES_MS) return
+
+      ultimaApuracao = Date.now()
+      emVoo = operacao
+        .current()
+        .catch(() => {
+          // Notificação é conveniência. Falhar aqui não interrompe nada
+          // do que a pessoa veio fazer, e avisar sobre o aviso seria pior.
+        })
+        .finally(() => {
+          emVoo = null
+        })
+    }
+
+    assinantes += 1
+    apurarAgora = apurar
+
+    apurar()
+    if (relogio === null) relogio = window.setInterval(() => apurarAgora?.(), INTERVALO_MS)
+
+    return () => {
+      assinantes = Math.max(0, assinantes - 1)
+      if (assinantes > 0) return
+
+      /*
+        Último sino saindo: o relógio morre junto.
+
+        `apurarAgora` também é solto — sem isso o intervalo de uma
+        montagem anterior manteria viva a closure daquele componente,
+        que é a definição de vazamento por listener.
+      */
+      if (relogio !== null) {
+        window.clearInterval(relogio)
+        relogio = null
+      }
+      apurarAgora = null
+    }
+  }, [ligado])
+}
+
 export function Sino() {
   const [aberto, setAberto] = useState(false)
   const caixa = useRef<HTMLDivElement>(null)
@@ -33,29 +137,14 @@ export function Sino() {
   const marcarLida = useMarcarLida()
   const marcarTodas = useMarcarTodasLidas()
 
+
   /*
-    Recalcula ao abrir o sistema e de tempos em tempos.
+    A apuração passa pelo agendador único acima.
 
-    O `catch` não é zelo excessivo: `void promessa` sem tratamento vira
-    rejeição não tratada, e este intervalo dispara sozinho para sempre.
-    Uma fonte fora do ar transformava o sino num alarme silencioso que
-    só o console ouvia.
+    Antes este efeito criava um `setInterval` por componente montado — e
+    são dois. Ver o comentário longo em `useSincroniaCompartilhada`.
   */
-  useEffect(() => {
-    if (soAgenda) return
-
-    const apurar = () => {
-      void sincronizar.executar(undefined).catch(() => {
-        // Notificação é conveniência. Falhar aqui não interrompe nada
-        // do que a pessoa veio fazer, e avisar sobre o aviso seria pior.
-      })
-    }
-
-    apurar()
-    const relogio = setInterval(apurar, 300_000)
-    return () => clearInterval(relogio)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [soAgenda])
+  useSincroniaCompartilhada(!soAgenda, () => sincronizar.executar(undefined))
 
   // Clique fora fecha.
   useEffect(() => {

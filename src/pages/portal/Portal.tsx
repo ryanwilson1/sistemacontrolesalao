@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { CabecalhoPagina } from '@/components/common'
 import { Abas } from '@/components/ui'
 import { useQuantosEsperando, useQuantosPedidos } from '@/hooks'
@@ -47,20 +47,28 @@ export default function Portal() {
       </div>
 
       <div className="max-w-3xl">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={secao}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-          >
-            {secao === 'pedidos' && <Solicitacoes />}
-            {secao === 'espera' && <ListaDeEspera />}
-            {secao === 'historico' && <HistoricoDePedidos />}
-            {secao === 'ajustes' && <Configuracao />}
-          </motion.div>
-        </AnimatePresence>
+        {/*
+          Sem `AnimatePresence mode="wait"` — mesmo motivo da Agenda.
+
+          O wait segurava a seção nova até a antiga terminar de sair
+          (180ms), e as seções daqui montam consultas: Pedidos e Lista
+          de espera vão ao banco ao aparecer. Trocar de aba adiava a
+          partida dessas consultas por uma animação de saída que ninguém
+          pediu — no celular, é a diferença entre "troquei" e "travou".
+
+          A troca de `key` remonta na hora e a entrada toca por cima.
+        */}
+        <motion.div
+          key={secao}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
+        >
+          {secao === 'pedidos' && <Solicitacoes />}
+          {secao === 'espera' && <ListaDeEspera />}
+          {secao === 'historico' && <HistoricoDePedidos />}
+          {secao === 'ajustes' && <Configuracao />}
+        </motion.div>
       </div>
     </>
   )

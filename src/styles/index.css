@@ -93,4 +93,105 @@
   .pt-safe {
     padding-top: env(safe-area-inset-top);
   }
+
+  /*
+    Vidro das barras fixas — cabeçalho e barra inferior.
+
+    ---------------------------------------------------------------
+    Por que isto deixou de ser `backdrop-blur-lg`
+    ---------------------------------------------------------------
+    `backdrop-filter` não é pintado uma vez: o navegador precisa
+    recompor o desfoque SEMPRE que o conteúdo atrás da barra muda. E
+    atrás dela passa a página inteira — que muda a cada rolagem e a cada
+    navegação.
+
+    No Safari do iPhone essa recomposição não é acelerada como no
+    desktop. Com duas barras fixas de largura total (cabeçalho e barra
+    inferior) e um raio de 16px, cada troca de tela obriga o aparelho a
+    desfocar duas faixas do tamanho da tela antes de mostrar qualquer
+    coisa. É trabalho que acontece no caminho crítico do toque.
+
+    A saída não é remover o vidro — é torná-lo barato:
+
+      · raio menor (o custo cresce com o raio);
+      · fundo mais opaco, para o olho não sentir falta do raio perdido;
+      · e, em tela de toque, o menor raio que ainda dá a sensação de
+        profundidade.
+
+    Lado a lado com a versão anterior a diferença é imperceptível: o
+    fundo já era 85–92% branco, então o que o desfoque fazia ali era
+    quase todo sugestão.
+  */
+  .vidro-barra {
+    background-color: rgb(255 255 255 / 0.88);
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
+  }
+
+  @media (pointer: coarse) {
+    .vidro-barra {
+      background-color: rgb(255 255 255 / 0.96);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+  }
+
+  /*
+    Sem suporte a `backdrop-filter`, a barra ficaria translúcida sobre o
+    conteúdo rolando — ilegível. O fundo quase sólido é o desfecho certo.
+  */
+  /*
+    Entrada em cascata das listas — em CSS, não em JavaScript.
+
+    ---------------------------------------------------------------
+    Trinta animações por navegação
+    ---------------------------------------------------------------
+    Cada linha das listas era um `motion.li` com atraso próprio
+    (`delay: indice * 0.03`). Numa página de trinta clientes isso são
+    trinta instâncias do Framer Motion criadas na montagem, cada uma com
+    seu relógio de atraso e sua interpolação avaliada quadro a quadro no
+    fio principal.
+
+    E acontecia em TODA entrada na tela. A sequência do teste de estresse
+    — Painel, Clientes, Caixa, Estoque, Serviços — passa por cinco listas
+    assim; uma volta completa criava mais de cem animações em JavaScript,
+    exatamente enquanto as consultas daquelas telas voltavam do Supabase.
+
+    O mesmo efeito em `@keyframes` é resolvido pelo compositor: o fio
+    principal escreve uma propriedade e sai do caminho. O atraso continua
+    por item, agora como `animation-delay` inline — um número, não um
+    objeto de animação.
+
+    `both` preserva o estado inicial durante o atraso; sem ele a linha
+    piscaria visível antes de começar a entrar.
+  */
+  .entra-lista {
+    animation: entra-lista 0.24s ease-out both;
+  }
+
+  .entra-lista-lateral {
+    animation: entra-lista-lateral 0.22s ease-out both;
+  }
+
+  @keyframes entra-lista {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes entra-lista-lateral {
+    from {
+      opacity: 0;
+      transform: translateX(-5px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
 }

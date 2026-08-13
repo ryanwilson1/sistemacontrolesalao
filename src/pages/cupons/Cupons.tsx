@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import { Pencil, Percent, Plus, Tag, Trash2 } from 'lucide-react'
 import { CabecalhoPagina, Indicador } from '@/components/common'
 import { Abas, Botao, Carta, Etiqueta } from '@/components/ui'
@@ -126,12 +125,10 @@ export default function Cupons() {
             const restantes = cupom.limiteUsos > 0 ? cupom.limiteUsos - cupom.usos : null
 
             return (
-              <motion.li
+              <li
                 key={cupom.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(indice * 0.03, 0.3), duration: 0.25 }}
-                className="min-w-0 rounded-2xl border border-onix-100 bg-white p-4 shadow-carta"
+                className="entra-lista min-w-0 rounded-2xl border border-onix-100 bg-white p-4 shadow-carta"
+                style={{ animationDelay: `${Math.min(indice * 0.03, 0.3)}s` }}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -185,7 +182,7 @@ export default function Cupons() {
                     <Trash2 className="h-3.5 w-3.5" />
                   </Botao>
                 </div>
-              </motion.li>
+              </li>
             )
           })}
         </ul>

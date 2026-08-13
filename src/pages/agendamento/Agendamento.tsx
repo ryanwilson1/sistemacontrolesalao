@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 import { CarregandoTela } from '@/components/feedback'
 import { usarFluxoDoPortal } from './usarFluxoDoPortal'
@@ -71,13 +71,20 @@ export default function Agendamento() {
 
         {!finalizado && etapa !== 'espera' && <Progresso etapaAtual={etapa} />}
 
-        <AnimatePresence mode="wait">
-          <motion.div
+        {/*
+          Sem `AnimatePresence mode="wait"` — o mesmo motivo da Agenda e
+          do Portal. O wait segurava a etapa nova por 220ms de saída, e a
+          etapa de horário monta a grade com consultas ao banco: a
+          cliente tocava em "continuar" e a busca dos horários partia só
+          depois da animação. A troca de `key` remonta na hora e a
+          entrada toca por cima; o deslize de saída era o único custo, e
+          ninguém escolhe um horário olhando para a etapa que saiu.
+        */}
+        <motion.div
             key={etapa}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.22 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
           >
             {etapa === 'servico' && (
               <EscolhaServico servicos={fluxo.servicos} aoEscolher={fluxo.escolherServico} />
@@ -184,7 +191,6 @@ export default function Agendamento() {
               <NaEspera nome={fluxo.nome} servico={fluxo.servico?.nome ?? ''} />
             )}
           </motion.div>
-        </AnimatePresence>
 
         {identificador && <RodapeDoPortal identificador={identificador} />}
       </main>

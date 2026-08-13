@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { cache } from '@/hooks/dados/cache'
-import { motion } from 'framer-motion'
 import { Database, Download, RotateCcw, Trash2 } from 'lucide-react'
 import { Botao, Carta, Etiqueta } from '@/components/ui'
 import { Confirmar, EstadoVazio, EsqueletoLista } from '@/components/feedback'
@@ -112,12 +111,10 @@ export function HistoricoBackups() {
           const origem = ORIGEM[backup.origem] ?? ORIGEM.manual!
 
           return (
-            <motion.li
+            <li
               key={backup.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(indice * 0.03, 0.3), duration: 0.25 }}
-              className="rounded-2xl border border-onix-100 bg-white p-4 shadow-carta"
+              className="entra-lista rounded-2xl border border-onix-100 bg-white p-4 shadow-carta"
+              style={{ animationDelay: `${Math.min(indice * 0.03, 0.3)}s` }}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
@@ -163,7 +160,7 @@ export function HistoricoBackups() {
                   </Botao>
                 </div>
               </div>
-            </motion.li>
+            </li>
           )
         })}
       </ul>

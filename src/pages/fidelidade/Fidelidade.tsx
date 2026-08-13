@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatarMoedaBR, moedaOuZero } from '@/utils/moeda'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { Gem, Save } from 'lucide-react'
 import { CabecalhoPagina } from '@/components/common'
 import { CampoMoeda, Botao, Campo, Carta, CartaTitulo, Entrada, Interruptor, Retrato } from '@/components/ui'
@@ -163,12 +162,11 @@ export default function Fidelidade() {
           ) : (
             <ol className="divide-y divide-onix-50">
               {ranking.map((linha, indice) => (
-                <motion.li
+                <li
                   key={linha.clienteId}
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: Math.min(indice * 0.03, 0.3), duration: 0.22 }}
-                >
+                className="entra-lista-lateral"
+                style={{ animationDelay: `${Math.min(indice * 0.03, 0.3)}s` }}
+              >
                   <Link
                     to={ROTAS.cliente(linha.clienteId)}
                     className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50 sm:px-5"
@@ -197,7 +195,7 @@ export default function Fidelidade() {
                       </span>
                     </span>
                   </Link>
-                </motion.li>
+                </li>
               ))}
             </ol>
           )}

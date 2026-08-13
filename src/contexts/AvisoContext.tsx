@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AlertTriangle, Check, Info, X } from 'lucide-react'
 import { cn } from '@/utils/cn'
@@ -31,7 +31,37 @@ const MAXIMO_EMPILHADO = 3
 export function AvisoProvider({ children }: { children: ReactNode }) {
   const [avisos, setAvisos] = useState<Aviso[]>([])
 
+  /**
+   * Os relógios de saída de cada aviso.
+   *
+   * ---------------------------------------------------------------
+   * O timer que sobrevivia à desmontagem
+   * ---------------------------------------------------------------
+   * `empilhar` chamava `window.setTimeout(() => remover(id), duracao)`
+   * e jogava o identificador fora. Nada os cancelava — nem quando o
+   * aviso era fechado no X (o relógio continuava correndo para remover
+   * algo que já saiu), nem quando o provedor desmontava.
+   *
+   * Desmontar o provedor não é hipótese de laboratório: acontece a cada
+   * troca de sessão e sempre que o `LimiteDeErro` recompõe a árvore.
+   * Com até três avisos de seis segundos empilhados, ficavam três
+   * `setTimeout` vivos chamando `setAvisos` num componente morto — o
+   * clássico "não é possível atualizar estado em componente
+   * desmontado", que em React 18 falha em silêncio e deixa a closure
+   * inteira presa na memória até disparar.
+   *
+   * Agora cada relógio tem dono, e o dono os apaga: ao remover o aviso
+   * e ao desmontar.
+   */
+  const relogios = useRef(new Map<number, number>())
+
   const remover = useCallback((id: number) => {
+    const relogio = relogios.current.get(id)
+    if (relogio !== undefined) {
+      window.clearTimeout(relogio)
+      relogios.current.delete(id)
+    }
+
     setAvisos((atuais) => atuais.filter((a) => a.id !== id))
   }, [])
 
@@ -39,10 +69,18 @@ export function AvisoProvider({ children }: { children: ReactNode }) {
     (tipo: Tipo, titulo: string, detalhe?: string) => {
       const id = Date.now() + Math.random()
       setAvisos((atuais) => [...atuais.slice(-(MAXIMO_EMPILHADO - 1)), { id, tipo, titulo, detalhe }])
-      window.setTimeout(() => remover(id), ESTILO[tipo].duracao)
+      relogios.current.set(id, window.setTimeout(() => remover(id), ESTILO[tipo].duracao))
     },
     [remover],
   )
+
+  useEffect(() => {
+    const guardados = relogios.current
+    return () => {
+      for (const relogio of guardados.values()) window.clearTimeout(relogio)
+      guardados.clear()
+    }
+  }, [])
 
   const valor = useMemo<ContextoAviso>(
     () => ({

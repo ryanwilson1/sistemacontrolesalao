@@ -45,4 +45,10 @@ export interface CanalTempoReal {
   inscrever(ouvinte: OuvinteTempoReal): () => void
 
   encerrar(): void
+
+  /**
+   * Retrato para o diagnóstico: quantos canais e quantos ouvintes.
+   * Opcional porque nenhum canal precisa dele para funcionar.
+   */
+  medir?(): unknown
 }

@@ -1,6 +1,7 @@
 import { CanalLocal, CanalSilencioso, IDENTIDADE_DESTA_ABA } from './CanalLocal'
 import { CanalSupabase } from './CanalSupabase'
 import { temSupabase } from '../supabase/cliente'
+import { diagnostico } from '../diagnostico'
 import type { CanalTempoReal } from './tipos'
 
 export type { CanalTempoReal, EventoTempoReal, OuvinteTempoReal } from './tipos'
@@ -23,6 +24,8 @@ export const tempoReal: CanalTempoReal =
     : temSupabase()
       ? new CanalSupabase()
       : new CanalLocal()
+
+diagnostico.observar('tempoReal', () => tempoReal.medir?.() ?? tempoReal.nome)
 
 /**
  * Publica a mudança de uma coleção.

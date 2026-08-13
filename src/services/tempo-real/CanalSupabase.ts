@@ -1,5 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../supabase/cliente'
+import { diagnostico } from '../diagnostico'
 import type { Colecao } from '../storage'
 import type { CanalTempoReal, EventoTempoReal, OuvinteTempoReal } from './tipos'
 
@@ -63,7 +64,42 @@ export class CanalSupabase implements CanalTempoReal {
   private tentativas = 0
   private reconexao: number | null = null
 
+  /**
+   * `encerrar()` foi chamado e ninguém pediu para voltar.
+   *
+   * ---------------------------------------------------------------
+   * O canal que ressuscitava sozinho depois do logout
+   * ---------------------------------------------------------------
+   * `descartarCanal()` chama `removeChannel`, e o Supabase responde
+   * avisando a própria assinatura: `CLOSED`. Esse aviso caía no
+   * `subscribe(...)` abaixo, que tratava `CLOSED` como queda de rede e
+   * chamava `reconectar()`.
+   *
+   * A sequência real era:
+   *
+   *   a proprietária sai
+   *   ↓
+   *   `encerrar()` → `descartarCanal()` → `removeChannel`
+   *   ↓
+   *   o Supabase devolve `CLOSED`
+   *   ↓
+   *   `reconectar()` agenda uma volta em 2 segundos
+   *   ↓
+   *   `iniciar()` abre um canal NOVO — sem sessão, com token revogado
+   *   ↓
+   *   o servidor recusa → `CHANNEL_ERROR` → reconecta de novo
+   *
+   * Um laço de reconexão que só parava quando a aba fechava, e que
+   * segurava callbacks vivos o tempo todo. Era isto que fazia o
+   * aparelho ficar mais pesado quanto mais o dia passava.
+   *
+   * A marca é a autorização explícita: quem manda abrir é o
+   * `SessaoContext`, e nada mais reabre por conta própria.
+   */
+  private desligado = false
+
   iniciar(): void {
+    this.desligado = false
     if (this.canal) return
 
     /*
@@ -95,7 +131,7 @@ export class CanalSupabase implements CanalTempoReal {
       garantir idempotência — o `if (this.canal) return` acima.
     */
 
-    this.canal = supabase()
+    const meuCanal = supabase()
       .channel('studio')
       .on(
         'postgres_changes',
@@ -103,6 +139,17 @@ export class CanalSupabase implements CanalTempoReal {
         (mudanca) => {
           const colecao = COLECAO_DA_TABELA[mudanca.table]
           if (!colecao) return
+
+          /*
+            Evento de um canal que já foi descartado não vale.
+
+            Durante uma reconexão os dois existem por um instante, e o
+            velho ainda entrega o que estava na fila. Deixá-lo passar
+            significaria invalidar o cache duas vezes pelo mesmo fato.
+          */
+          if (this.canal !== meuCanal) return
+
+          diagnostico.contar('eventosTempoReal')
 
           this.entregar({
             colecao,
@@ -139,6 +186,21 @@ export class CanalSupabase implements CanalTempoReal {
           simplesmente parava de se atualizar e ninguém tinha como saber.
           É a pior forma de falhar, porque parece que está funcionando.
         */
+
+        /*
+          Duas recusas antes de qualquer decisão.
+
+          `desligado` — o aviso é o eco do próprio `removeChannel` que o
+          logout disparou. Reagir a ele reabriria o canal que acabamos
+          de fechar.
+
+          `this.canal !== meuCanal` — o aviso vem de um canal que já foi
+          substituído. Reagir a ele derrubaria o canal NOVO, e a cada
+          oscilação de rede o sistema trocaria de canal duas vezes em vez
+          de uma.
+        */
+        if (this.desligado || this.canal !== meuCanal) return
+
         if (situacao === 'SUBSCRIBED') {
           this.tentativas = 0
           return
@@ -147,6 +209,10 @@ export class CanalSupabase implements CanalTempoReal {
           this.reconectar()
         }
       })
+
+    this.canal = meuCanal
+    diagnostico.contar('canaisAbertos')
+    this.observarRetomada()
   }
 
   /**
@@ -186,10 +252,15 @@ export class CanalSupabase implements CanalTempoReal {
   }
 
   encerrar(): void {
+    // A marca vem PRIMEIRO: `descartarCanal` provoca o `CLOSED` que a
+    // marca existe para ignorar.
+    this.desligado = true
+
     if (this.reconexao !== null) {
       window.clearTimeout(this.reconexao)
       this.reconexao = null
     }
+    this.pararDeObservarRetomada()
     this.descartarCanal()
     this.ouvintes.clear()
     this.tentativas = 0
@@ -222,6 +293,7 @@ export class CanalSupabase implements CanalTempoReal {
 
     const anterior = this.canal
     this.canal = null
+    diagnostico.contar('canaisFechados')
 
     // Ordem importa: `removeChannel` já faz o unsubscribe por dentro,
     // e chamar os dois em sequência inverte o estado interno.
@@ -236,7 +308,10 @@ export class CanalSupabase implements CanalTempoReal {
    * fechado até a bateria acabar.
    */
   private reconectar(): void {
+    if (this.desligado) return
     if (this.reconexao !== null) return
+
+    diagnostico.contar('reconexoes')
 
     /*
       O canal morto sai AGORA, não na hora de criar o novo.
@@ -257,6 +332,83 @@ export class CanalSupabase implements CanalTempoReal {
     }, espera)
   }
 
+  /* ---------------------------------------------------------------- */
+
+  private pararRetomada: (() => void) | null = null
+
+  /**
+   * Encurta a espera quando o aparelho volta a ter chance de conectar.
+   *
+   * ---------------------------------------------------------------
+   * Os trinta segundos de agenda parada
+   * ---------------------------------------------------------------
+   * A espera cresce até trinta segundos, e está certo — um celular em
+   * área de sombra não pode martelar o servidor. O problema é o desfecho
+   * comum no iPhone:
+   *
+   *   a tela apaga → o WebSocket morre → primeira falha, espera 2s
+   *   ↓ (o celular fica no bolso; as tentativas seguem falhando)
+   *   a espera chega ao teto
+   *   ↓
+   *   a proprietária desbloqueia e abre a Agenda
+   *   ↓
+   *   e espera até trinta segundos por um canal que já poderia estar de pé
+   *
+   * Nesse intervalo a agenda dela simplesmente não recebe o horário que
+   * a cliente acabou de marcar. `visibilitychange` e `online` são
+   * exatamente o aviso de \"agora vale a pena tentar de novo\": a espera é
+   * cancelada, o contador zera e a conexão acontece na hora.
+   *
+   * Só age quando NÃO há canal de pé. Com o canal vivo, voltar do
+   * segundo plano não mexe em nada — é o requisito de que trocar de tela
+   * ou de aplicativo nunca recrie o canal.
+   */
+  private observarRetomada(): void {
+    if (this.pararRetomada || typeof window === 'undefined') return
+
+    const retomar = () => {
+      if (this.desligado) return
+      if (this.canal) return
+      if (document.visibilityState !== 'visible') return
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+
+      if (this.reconexao !== null) {
+        window.clearTimeout(this.reconexao)
+        this.reconexao = null
+      }
+      this.tentativas = 0
+      this.iniciar()
+    }
+
+    const aoVoltar = () => {
+      if (document.visibilityState === 'visible') retomar()
+    }
+
+    document.addEventListener('visibilitychange', aoVoltar)
+    window.addEventListener('online', retomar)
+
+    this.pararRetomada = () => {
+      document.removeEventListener('visibilitychange', aoVoltar)
+      window.removeEventListener('online', retomar)
+    }
+  }
+
+  private pararDeObservarRetomada(): void {
+    this.pararRetomada?.()
+    this.pararRetomada = null
+  }
+
+
+  /** Ver `CanalTempoReal.medir`. Não participa do funcionamento. */
+  medir(): unknown {
+    return {
+      canalAberto: this.canal ? 1 : 0,
+      ouvintes: this.ouvintes.size,
+      reconexaoAgendada: this.reconexao !== null,
+      tentativas: this.tentativas,
+      desligado: this.desligado,
+    }
+  }
 
   private entregar(evento: EventoTempoReal): void {
     // Cópia da lista: um ouvinte que se cancela durante a entrega não

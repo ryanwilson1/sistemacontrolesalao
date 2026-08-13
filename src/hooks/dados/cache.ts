@@ -11,10 +11,53 @@
  * `useQuery`.
  */
 
+import { diagnostico } from '@/services/diagnostico'
+
 type Ouvinte = () => void
 
 const valores = new Map<string, unknown>()
 const ouvintes = new Map<string, Set<Ouvinte>>()
+
+/**
+ * A idade de cada chave.
+ *
+ * ---------------------------------------------------------------
+ * O furo que isto fecha
+ * ---------------------------------------------------------------
+ * `useConsulta` já tinha um contador de geração — mas **por
+ * componente**. Ele impede que a resposta antiga escreva na tela
+ * daquele componente, e não impede o pior caso:
+ *
+ *   a tela de Agenda monta e dispara a busca A
+ *   ↓
+ *   a proprietária toca em Clientes — a Agenda DESMONTA
+ *   ↓
+ *   um evento do Realtime invalida `agenda:...`
+ *   ↓
+ *   a busca A aterrissa e chama `cache.gravar` do mesmo jeito
+ *
+ * O componente morreu, então ninguém checou geração nenhuma; e
+ * `cache.gravar` acorda TODOS os inscritos daquela chave. O estado
+ * anterior à invalidação volta para o cache e, dali, para qualquer tela
+ * que abrir a Agenda em seguida. Sem erro, sem rastro.
+ *
+ * A marca resolve na raiz: quem começa uma busca anota a marca da chave
+ * naquele instante e só tem permissão de gravar se ela não mudou. Os
+ * números são de um relógio global e **nunca se repetem**, então uma
+ * chave descartada pela poda (marca ausente = 0) jamais coincide com uma
+ * marca capturada antes.
+ *
+ * `era` cobre o `limpar()` do logout: ali as marcas somem todas de uma
+ * vez, e sem um segundo componente a busca iniciada antes do logout —
+ * cuja chave nunca tinha sido invalidada, marca 0 — voltaria a valer.
+ */
+let relogioDeVersao = 0
+let era = 0
+const versoes = new Map<string, number>()
+
+function envelhecer(chave: string): void {
+  versoes.set(chave, ++relogioDeVersao)
+}
 
 /**
  * Teto de entradas guardadas.
@@ -66,6 +109,38 @@ function podar(): void {
     if (valores.size <= TETO) break
     if (ouvintes.has(chave)) continue
     valores.delete(chave)
+    /*
+      A marca sai junto. Pode: os números do relógio nunca se repetem,
+      então a ausência (0) não coincide com nenhuma marca capturada por
+      uma busca ainda no ar — e o efeito de não coincidir é recusar a
+      gravação, que é o lado seguro.
+    */
+    versoes.delete(chave)
+  }
+}
+
+/**
+ * O mapa de versões também precisa de teto.
+ *
+ * Ele cresce por invalidação, não por consulta: uma manhã de gravações
+ * com o Realtime ativo cria centenas de entradas de chaves que ninguém
+ * mais lê. O corte só acontece quando o mapa passa do dobro do teto de
+ * valores, e só remove chave sem valor guardado e sem tela escutando.
+ */
+function podarVersoes(): void {
+  if (versoes.size <= TETO * 2) return
+
+  for (const chave of versoes.keys()) {
+    if (versoes.size <= TETO) break
+    /*
+      Buscas em voo também ficam protegidas: podar a versão de uma chave
+      cuja busca ainda está no ar devolveria a marca ao zero — e uma
+      resposta capturada antes de qualquer invalidação voltaria a passar
+      na comparação. É um caso raríssimo (exigiria centenas de
+      invalidações durante uma única busca), mas custa uma verificação.
+    */
+    if (valores.has(chave) || ouvintes.has(chave) || emAndamento.has(chave)) continue
+    versoes.delete(chave)
   }
 }
 
@@ -78,6 +153,31 @@ export const cache = {
     valores.set(chave, valor)
     podar()
     ouvintes.get(chave)?.forEach((avisar) => avisar())
+  },
+
+  /**
+   * A marca da chave agora. Guarde-a antes de começar a busca e
+   * devolva-a a `gravarSe` quando a resposta chegar.
+   */
+  marcaDe(chave: string): string {
+    return `${era}:${versoes.get(chave) ?? 0}`
+  },
+
+  /**
+   * Grava **se a resposta ainda valer**.
+   *
+   * Devolve `false` quando a chave envelheceu entre o início da busca e
+   * a chegada dela — uma invalidação, um logout. Nesse caso nada é
+   * escrito e ninguém é acordado: a resposta é antiga, e o único
+   * destino honesto de um dado antigo é o silêncio.
+   */
+  gravarSe<T>(chave: string, valor: T, marca: string): boolean {
+    if (this.marcaDe(chave) !== marca) {
+      diagnostico.contar('respostasDescartadas')
+      return false
+    }
+    this.gravar(chave, valor)
+    return true
   },
 
   /** A busca em voo desta chave, se houver. Usada por `useConsulta`. */
@@ -133,30 +233,91 @@ export const cache = {
       uma leitura nova. Quem já estava esperando a antiga recebe o dado
       velho uma vez — e é acordado logo em seguida pelo aviso abaixo.
     */
+    /*
+      As chaves em voo entram no conjunto ANTES de serem soltas.
+
+      ---------------------------------------------------------------
+      O furo que o teste com o hook real encontrou
+      ---------------------------------------------------------------
+      O envelhecimento acontecia só para chaves com valor guardado ou
+      com tela escutando. Há um terceiro estado, e é exatamente o do
+      cenário perigoso: a busca partiu (está em `emAndamento`), nada
+      foi gravado ainda, e a tela já desmontou.
+
+      A sequência real:
+
+        a Agenda monta → busca parte → captura a marca
+        ↓
+        a proprietária troca de tela (ouvinte cancelado)
+        ↓
+        o Realtime invalida 'agenda' — mas a chave não está em
+        `valores` nem em `ouvintes`, então NÃO envelhecia
+        ↓
+        a busca aterrissa, a marca confere, e o estado ANTIGO entra
+        no cache por cima do novo
+
+      Que é literalmente o bug que a marca existe para impedir. A
+      correção é uma linha: quem está em voo também envelhece.
+    */
+    const chaves = new Set([
+      ...valores.keys(),
+      ...ouvintes.keys(),
+      ...emAndamento.keys(),
+    ])
+
     for (const chave of [...emAndamento.keys()]) {
       if (prefixos.some((prefixo) => chave.startsWith(prefixo))) {
         emAndamento.delete(chave)
       }
     }
 
-    // Varre valores E ouvintes: uma chave guardada sem ninguém escutando
-    // também precisa ser descartada, senão volta obsoleta na próxima tela.
-    const chaves = new Set([...valores.keys(), ...ouvintes.keys()])
-
     for (const chave of chaves) {
       if (!prefixos.some((prefixo) => chave.startsWith(prefixo))) continue
 
       valores.delete(chave)
+      /*
+        Envelhecer ANTES de acordar os inscritos.
+
+        Quem acorda dispara uma busca nova e captura a marca na hora; se
+        o envelhecimento viesse depois, a busca nova nasceria com a marca
+        velha e seria recusada por si mesma na volta.
+      */
+      envelhecer(chave)
       ouvintes.get(chave)?.forEach((avisar) => avisar())
     }
+
+    podarVersoes()
+    diagnostico.contar('invalidacoes')
   },
 
   limpar(): void {
     valores.clear()
     emAndamento.clear()
+    /*
+      Era nova: toda busca iniciada antes do logout perde o direito de
+      gravar, inclusive as de chaves que nunca tinham sido invalidadas.
+      Sem isto, a consulta que a proprietária deixou no ar ao sair
+      aterrissaria no cache já com a Samara na tela.
+    */
+    era += 1
+    versoes.clear()
     ouvintes.forEach((conjunto) => conjunto.forEach((avisar) => avisar()))
   },
+
+  /** Retrato para o diagnóstico. Não usado pela interface. */
+  medir(): { valores: number; ouvintes: number; emVoo: number; versoes: number } {
+    let total = 0
+    for (const conjunto of ouvintes.values()) total += conjunto.size
+    return {
+      valores: valores.size,
+      ouvintes: total,
+      emVoo: emAndamento.size,
+      versoes: versoes.size,
+    }
+  },
 }
+
+diagnostico.observar('cache', () => cache.medir())
 
 /** Prefixos usados nas invalidações. Centralizados para não errar a string. */
 export const CHAVES = {

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { Archive, ChevronLeft, ChevronRight, MessageCircle, Plus, Search, Users } from 'lucide-react'
 import { CabecalhoPagina } from '@/components/common'
 import { Botao, Carta, Entrada, Retrato } from '@/components/ui'
@@ -93,11 +92,10 @@ export default function Clientes() {
         <>
           <ul className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
             {dados.itens.map((cliente, indice) => (
-              <motion.li
+              <li
                 key={cliente.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(indice * 0.02, 0.3), duration: 0.25 }}
+                className="entra-lista"
+                style={{ animationDelay: `${Math.min(indice * 0.02, 0.3)}s` }}
               >
                 <div className="group flex items-center gap-3.5 rounded-2xl border border-onix-100 bg-white p-3.5 shadow-carta transition-colors hover:border-onix-200">
                   <Retrato nome={cliente.nome} />
@@ -123,7 +121,7 @@ export default function Clientes() {
                     </a>
                   )}
                 </div>
-              </motion.li>
+              </li>
             ))}
           </ul>
 

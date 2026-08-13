@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cache } from './cache'
+import { diagnostico } from '@/services/diagnostico'
 import { mensagemDeErro } from '@/utils/erros'
 import { comPrazo, PRAZO_PADRAO_MS } from '@/services/rede'
 
@@ -63,6 +64,18 @@ export function useConsulta<T>(
   buscarRef.current = buscar
 
   /**
+   * O que esta tela tem na mão agora, legível de dentro do `executar`.
+   *
+   * Serve a uma decisão só: acender ou não o \"carregando\". Ver o
+   * comentário sobre revalidação silenciosa abaixo.
+   */
+  const dadosRef = useRef(dados)
+  dadosRef.current = dados
+
+  /** A qual chave o `dados` acima pertence. */
+  const chaveDosDados = useRef(chave)
+
+  /**
    * Número da execução mais recente pedida por este componente.
    *
    * Vive num `ref` e não num estado porque mudá-lo não deve redesenhar
@@ -85,8 +98,35 @@ export function useConsulta<T>(
 
     const minhaVez = ++geracao.current
 
-    setCarregando(true)
+    /*
+      Revalidar em SILÊNCIO quando já há o que mostrar.
+
+      `setCarregando(true)` incondicional era um custo escondido. Uma
+      invalidação do tempo real acorda todas as consultas montadas, e
+      cada uma acendia o \"carregando\" — a Agenda trocava a grade inteira
+      por um esqueleto e voltava meio segundo depois. Duas montagens e
+      duas medições de layout completas por evento, e a tela piscando a
+      cada gravação de qualquer aparelho.
+
+      Com dado em mãos, a releitura acontece por baixo e a tela só muda
+      quando o resultado novo chega. Sem dado — primeira abertura, erro
+      anterior, troca de dia — o esqueleto continua aparecendo, que é
+      quando ele de fato informa algo.
+    */
+    setCarregando(dadosRef.current === undefined)
     setErro(null)
+
+    diagnostico.contar('consultasIniciadas')
+
+    /*
+      A marca da chave neste instante.
+
+      Guardada ANTES da busca começar. Se algo invalidar a chave no meio
+      do caminho, a marca muda e esta resposta perde o direito de
+      escrever — inclusive no cache, inclusive se este componente já
+      tiver saído da tela. Ver o comentário longo em `cache.ts`.
+    */
+    const marca = cache.marcaDe(chave)
 
     try {
       /*
@@ -119,8 +159,19 @@ export function useConsulta<T>(
       */
       if (minhaVez !== geracao.current) return
 
-      cache.gravar(chave, resultado)
-      if (montado.current) setDados(resultado)
+      /*
+        Duas guardas, e as duas precisam existir.
+
+        A geração acima protege ESTA tela de uma resposta que ela mesma
+        superou. A marca abaixo protege o CACHE — e portanto todas as
+        outras telas — de uma resposta que o mundo superou enquanto ela
+        vinha. A segunda vale mesmo quando este componente já morreu.
+      */
+      if (!cache.gravarSe(chave, resultado, marca)) return
+      if (montado.current) {
+        dadosRef.current = resultado
+        setDados(resultado)
+      }
     } catch (falha) {
       if (minhaVez !== geracao.current) return
       if (montado.current) setErro(mensagemDeErro(falha))
@@ -136,10 +187,28 @@ export function useConsulta<T>(
     }
 
     const guardado = cache.ler<T>(chave)
+    const trocouDePergunta = chaveDosDados.current !== chave
+    chaveDosDados.current = chave
+
     if (guardado !== undefined) {
+      dadosRef.current = guardado
       setDados(guardado)
       setCarregando(false)
     } else {
+      /*
+        Chave nova sem valor guardado: o que está na tela responde a
+        OUTRA pergunta.
+
+        Sem esta limpeza, a revalidação silenciosa viraria mentira na
+        troca de dia da Agenda — os agendamentos de ontem ficariam na
+        tela, sem esqueleto e sem aviso, como se fossem os de hoje. A
+        revalidação só pode ser silenciosa quando o dado velho ainda
+        responde à mesma pergunta.
+      */
+      if (trocouDePergunta) {
+        dadosRef.current = undefined
+        setDados(undefined)
+      }
       void executar()
     }
 
@@ -157,6 +226,7 @@ export function useConsulta<T>(
       */
       if (atual !== undefined) {
         if (montado.current) {
+          dadosRef.current = atual
           setDados(atual)
           setCarregando(false)
         }

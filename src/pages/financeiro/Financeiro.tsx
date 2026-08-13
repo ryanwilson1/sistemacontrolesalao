@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import { ArrowDownLeft, ArrowUpRight, Check, Plus, Target, Wallet } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { CabecalhoPagina, Indicador, NavegadorDePeriodo } from '@/components/common'
@@ -208,12 +207,10 @@ export default function Financeiro() {
               const receita = lancamento.tipo === 'receita'
 
               return (
-                <motion.li
+                <li
                   key={lancamento.id}
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: Math.min(indice * 0.02, 0.3), duration: 0.22 }}
-                  className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50"
+                  className="entra-lista-lateral flex items-center gap-3 px-4 py-3 transition-colors hover:bg-quartzo-50"
+                  style={{ animationDelay: `${Math.min(indice * 0.02, 0.3)}s` }}
                 >
                   <span
                     className={cn(
@@ -261,7 +258,7 @@ export default function Financeiro() {
                       <Check className="h-4 w-4" />
                     </button>
                   )}
-                </motion.li>
+                </li>
               )
             })}
           </ul>
