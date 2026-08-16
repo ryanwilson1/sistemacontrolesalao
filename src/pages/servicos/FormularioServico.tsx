@@ -12,11 +12,19 @@ import { ErroDeRegra, mensagemDeErro } from '@/utils/erros'
 import type { Servico } from '@/types'
 
 export function FormularioServico({
-  aberto, aoFechar, servico,
+  aberto, aoFechar, servico, aoPublicar,
 }: {
   aberto: boolean
   aoFechar: () => void
   servico?: Servico | null
+  /**
+   * Avisa a tela quando o que foi salvo ficou visível para a cliente.
+   *
+   * Opcional de propósito: sem ele o formulário se comporta exatamente
+   * como antes. Quem decide o que fazer com a notícia é a tela — o
+   * formulário não conhece o link público e não precisa conhecer.
+   */
+  aoPublicar?: (nome: string) => void
 }) {
   const { dados: categorias } = useCategorias()
   const { dados: equipe } = useAtendentes()
@@ -120,6 +128,14 @@ export function FormularioServico({
 
       aviso.sucesso(editando ? 'Serviço atualizado' : 'Serviço cadastrado', nomeLimpo)
       aoFechar()
+
+      /*
+        Publicado é `noLink` E `ativo` — os dois, porque é essa a
+        condição que `servicosRepo.publicos()` e `portal_servicos()`
+        aplicam. Anunciar "está no link" para um serviço desativado
+        seria mentir na tela sobre o que o portal faz.
+      */
+      if (noLink && ativo) aoPublicar?.(nomeLimpo)
     } catch (falha) {
       aviso.erro('Não foi possível salvar', mensagemDeErro(falha))
     }
