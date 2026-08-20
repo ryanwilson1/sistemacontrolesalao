@@ -337,11 +337,22 @@ const rotas = createRoutesFromElements(
         {/* Painel */}
         <Route element={<Protegida><Painelzinho /></Protegida>}>
           {/*
-            A agenda fica fora da guarda seguinte de propósito: é a
-            única tela que o acesso restrito enxerga, e é para cá que
-            ele é mandado quando tenta qualquer outra.
+            As áreas que o acesso restrito enxerga ficam fora da guarda
+            seguinte de propósito. Hoje são duas: Agenda e Clientes.
+
+            A lista tem par declarado em `AREAS_DO_ACESSO_RESTRITO`
+            (constants/rotas.ts), que é o que o menu lê. As duas
+            precisam concordar: rota liberada sem item de menu é tela
+            que ninguém acha, e item de menu sem rota liberada é botão
+            que devolve a pessoa para a agenda ao ser clicado.
+
+            A agenda continua sendo o destino do redirecionamento da
+            guarda, por ser a área de entrada de quem tem acesso
+            restrito.
           */}
           <Route path="agenda" element={<Agenda />} />
+          <Route path="clientes" element={<Clientes />} />
+          <Route path="clientes/:id" element={<FichaCliente />} />
 
           {/*
             Tudo o mais exige acesso completo.
@@ -355,8 +366,6 @@ const rotas = createRoutesFromElements(
           */}
           <Route element={<ExigeAcessoCompleto><Outlet /></ExigeAcessoCompleto>}>
             <Route index element={<Painel />} />
-            <Route path="clientes" element={<Clientes />} />
-            <Route path="clientes/:id" element={<FichaCliente />} />
             <Route path="servicos" element={<Servicos />} />
             <Route path="estoque" element={<Estoque />} />
             <Route path="financeiro" element={<SomenteGestor><Financeiro /></SomenteGestor>} />

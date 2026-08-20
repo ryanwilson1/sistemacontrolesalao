@@ -3,7 +3,7 @@ import {
   DatabaseBackup, FileBarChart, MessageCircle, Settings, Sparkles, Tag, Users,
   Wallet, Globe, type LucideIcon,
 } from 'lucide-react'
-import { ROTAS } from '@/constants'
+import { AREAS_DO_ACESSO_RESTRITO, ROTAS } from '@/constants'
 
 export interface ItemMenu {
   para: string
@@ -43,13 +43,14 @@ export const MENU: ItemMenu[] = [
 /**
  * Filtra pelo papel e devolve só o que a pessoa pode acessar.
  *
- * `soAgenda` corta antes de qualquer outra coisa, e devolve um item só.
- * Filtrar por `item.para === ROTAS.agenda` em vez de listar exceções
- * significa que a tela nova de amanhã **não** aparece para ela por
- * esquecimento — a regra é \"nada além da agenda\", não \"tudo menos
- * estas quinze\".
+ * O acesso restrito corta antes de qualquer outra coisa, e devolve
+ * apenas as áreas de `AREAS_DO_ACESSO_RESTRITO`. Consultar a lista de
+ * permissão em vez de listar exceções significa que a tela nova de
+ * amanhã **não** aparece para ela por esquecimento — a regra continua
+ * sendo \"nada além do que está escrito\", não \"tudo menos estas
+ * quinze\".
  */
 export const menuVisivel = (ehGestor: boolean, soAgenda = false): ItemMenu[] => {
-  if (soAgenda) return MENU.filter((item) => item.para === ROTAS.agenda)
+  if (soAgenda) return MENU.filter((item) => AREAS_DO_ACESSO_RESTRITO.includes(item.para))
   return MENU.filter((item) => !item.soGestor || ehGestor)
 }

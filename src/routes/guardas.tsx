@@ -93,12 +93,17 @@ export function SomenteGestor({ children }: { children: ReactNode }) {
 }
 
 /**
- * Fecha tudo que não é a agenda.
+ * Fecha tudo que não está em `AREAS_DO_ACESSO_RESTRITO`.
  *
  * O contrário de `SomenteGestor`: aquela abre telas para quem manda,
  * esta fecha para quem foi convidado a ver só um pedaço. É a guarda da
  * profissional parceira — a manicure que divide o espaço e precisa dos
- * horários sem alcançar o caixa nem a ficha das clientes do salão.
+ * horários sem alcançar o caixa nem os ajustes do salão.
+ *
+ * Hoje o pedaço são duas áreas, Agenda e Clientes, e elas ficam FORA
+ * desta guarda (ver `routes/index.tsx`). A guarda não as lista: ela
+ * fecha o resto. Quem decide o que é liberado é a posição na árvore de
+ * rotas, e o menu lê a mesma lista pelo nome.
  *
  * O destino é a agenda, não o painel: mandar para `/` daria uma volta —
  * o painel também é fechado para ela — e a pessoa veria a tela piscar
