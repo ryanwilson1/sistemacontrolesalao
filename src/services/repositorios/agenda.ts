@@ -12,8 +12,6 @@ import {
 import { gradeDeHorarios, horariosLivres, profissionaisDoServico } from '../agenda/horarios'
 import { confereTelefone, gerarProtocolo, limparProtocolo } from '../agenda/protocolo'
 import { ErroDeRegra } from '@/utils/erros'
-import { chamarPortal, temSupabase } from '../supabase'
-import { armazenamento } from '../storage'
 import { faixaDeDias } from '@/utils/datas'
 import type {
   Agendamento, AgendamentoDetalhado, OpcaoDeHorario, SituacaoAgendamento,
@@ -282,44 +280,11 @@ class RepositorioAgendamentos extends RepositorioBase<Agendamento> {
     const atual = await this.buscar(id)
     if (!atual) throw new ErroDeRegra('Este agendamento não existe mais.')
 
-    /*
-      Concluído tem caminho — só não é o caminho curto.
-
-      A versão anterior recusava e mandava cancelar. A recusa protegia o
-      que importa (receita, caixa, pontos, estoque e ficha ficariam
-      órfãos), mas criava um beco: um atendimento concluído por engano —
-      ou o cadastro de teste do primeiro dia de uso — ficava na agenda
-      para sempre, inflando o faturamento e a ficha da cliente.
-
-      `estornar_atendimento` é o inverso exato de `concluir_atendimento`,
-      na mesma transação: devolve o produto à prateleira, apaga a
-      receita, os pontos, a ficha e a entrada do caixa, e só então
-      remove o agendamento. Ou tudo volta, ou nada volta.
-
-      Ela recusa sozinha se o caixa daquele dia já foi fechado —
-      reescrever uma conferência assinada é pior do que manter o
-      registro errado, e nesse caso a saída certa é uma sangria manual
-      feita por quem entende o que está corrigindo.
-    */
     if (atual.situacao === 'concluido') {
-      if (!temSupabase()) {
-        throw new ErroDeRegra(
-          'Estornar um atendimento concluído exige conexão com o servidor.',
-        )
-      }
-
-      await chamarPortal('estornar_atendimento', {
-        p_agendamento_id: id,
-        p_excluir: true,
-      })
-
-      /*
-        O estorno mexeu em SEIS tabelas de uma vez. Invalidar só a
-        agenda deixaria o painel mostrando a receita que não existe
-        mais e o estoque com a quantidade errada até alguém recarregar.
-      */
-      armazenamento.invalidar?.()
-      return
+      throw new ErroDeRegra(
+        'Este atendimento já foi concluído e gerou registro financeiro. ' +
+          'Para removê-lo da agenda, cancele-o em vez de excluir.',
+      )
     }
 
     if (atual.situacao === 'em_atendimento') {
